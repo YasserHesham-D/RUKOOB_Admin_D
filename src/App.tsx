@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -30,7 +30,7 @@ const LandingRedirect: React.FC = () => {
 
 export const AppRoutes: React.FC = () => {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         {/* Public Login Route */}
         <Route path="/login" element={<Login />} />
@@ -85,7 +85,7 @@ export const AppRoutes: React.FC = () => {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 };
 
