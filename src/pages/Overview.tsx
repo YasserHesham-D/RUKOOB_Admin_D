@@ -619,8 +619,8 @@ export const Overview: React.FC = () => {
           </div>
         </div>
 
-        {/* The 8 Official Core KPI Cards Grid (Direct from Database) */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+        {/* The 10 Official Core KPI Cards Grid (Direct from Database & Backend Background Service) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
           {/* 1. مجموع الكباتن */}
           <div className="card-glass p-4 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between shadow-sm">
             <div>
@@ -647,7 +647,40 @@ export const Overview: React.FC = () => {
             </div>
           </div>
 
-          {/* 3. بانتظار التوثيق */}
+          {/* 3. إجمالي الركاب المسجلين */}
+          <div className="card-glass p-4 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between shadow-sm">
+            <div>
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-bold block">إجمالي الركاب</span>
+              <span className="text-xl lg:text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1 block">
+                {stats.totalPassengers}
+              </span>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-rukoob-forest/30 flex items-center justify-center text-purple-500">
+              <Users className="w-5 h-5" />
+            </div>
+          </div>
+
+          {/* 4. ركاب نشطون الآن (خدمة الباك إند الخلفية كل 10 دقائق) */}
+          <div className="card-glass p-4 rounded-xl border border-emerald-500/30 dark:border-emerald-500/30 bg-emerald-500/5 flex items-center justify-between shadow-sm relative overflow-hidden">
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-emerald-700 dark:text-emerald-400 font-bold block">ركاب نشطون الآن</span>
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+              </div>
+              <span className="text-xl lg:text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1 block">
+                {stats.activePassengers ?? 0}
+              </span>
+              <span className="text-[9px] text-slate-400 block mt-0.5">خدمة خلفية بالباك إند (كل 10 د)</span>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-600">
+              <Activity className="w-5 h-5" />
+            </div>
+          </div>
+
+          {/* 5. بانتظار التوثيق */}
           <div className="card-glass p-4 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between shadow-sm">
             <div>
               <span className="text-xs text-slate-500 dark:text-slate-400 font-bold block">بانتظار التوثيق</span>
@@ -660,7 +693,7 @@ export const Overview: React.FC = () => {
             </div>
           </div>
 
-          {/* 4. إجمالي المشاوير */}
+          {/* 6. إجمالي المشاوير */}
           <div className="card-glass p-4 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between shadow-sm">
             <div>
               <span className="text-xs text-slate-500 dark:text-slate-400 font-bold block">إجمالي المشاوير</span>
@@ -673,7 +706,7 @@ export const Overview: React.FC = () => {
             </div>
           </div>
 
-          {/* 5. مشاوير جارية */}
+          {/* 7. مشاوير جارية */}
           <div className="card-glass p-4 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between shadow-sm">
             <div>
               <span className="text-xs text-slate-500 dark:text-slate-400 font-bold block">مشاوير جارية</span>
@@ -686,7 +719,7 @@ export const Overview: React.FC = () => {
             </div>
           </div>
 
-          {/* 6. مشاوير مكتملة */}
+          {/* 8. مشاوير مكتملة */}
           <div className="card-glass p-4 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between shadow-sm">
             <div>
               <span className="text-xs text-slate-500 dark:text-slate-400 font-bold block">مشاوير مكتملة</span>
@@ -699,7 +732,7 @@ export const Overview: React.FC = () => {
             </div>
           </div>
 
-          {/* 7. مشاوير ملغاة */}
+          {/* 9. مشاوير ملغاة */}
           <div className="card-glass p-4 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between shadow-sm">
             <div>
               <span className="text-xs text-slate-500 dark:text-slate-400 font-bold block">مشاوير ملغاة</span>
@@ -712,7 +745,7 @@ export const Overview: React.FC = () => {
             </div>
           </div>
 
-          {/* 8. إجمالي الإيرادات */}
+          {/* 10. إجمالي الإيرادات */}
           <div className="card-glass p-4 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between shadow-sm">
             <div>
               <span className="text-xs text-slate-500 dark:text-slate-400 font-bold block">إجمالي الإيرادات</span>

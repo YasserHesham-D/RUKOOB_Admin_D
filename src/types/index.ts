@@ -1,4 +1,4 @@
-﻿export type Role = 'SuperAdmin' | 'OpsAdmin' | 'SupportAgent';
+export type Role = 'SuperAdmin' | 'OpsAdmin' | 'SupportAgent';
 
 export type Permission =
   | 'view_dashboard'
@@ -17,6 +17,10 @@ export interface AdminUser {
   email: string;
   role: Role;
   avatar?: string;
+  phone?: string;
+  permissions?: Permission[];
+  status?: 'active' | 'suspended';
+  createdAt?: string;
 }
 
 export enum DriverVerificationStatus {
@@ -178,6 +182,8 @@ export interface AdminDashboardDto {
   completedRides: number;
   cancelledRides: number;
   activeRides: number;
+  activePassengers?: number;
+  activePassengersLastSync?: string;
   totalRideValue: number;
   platformCommission: number;
   pendingDriverVerifications: number;

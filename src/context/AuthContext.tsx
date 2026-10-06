@@ -173,6 +173,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const hasPermission = (permission: Permission): boolean => {
+    if (currentRole === 'SuperAdmin') return true;
+    if (user?.permissions && user.permissions.length > 0) {
+      return user.permissions.includes(permission);
+    }
     const perms = rolePermissions[currentRole] || [];
     return perms.includes(permission);
   };

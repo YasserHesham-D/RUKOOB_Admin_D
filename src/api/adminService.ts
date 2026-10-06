@@ -1,4 +1,4 @@
-﻿import { apiClient } from './apiClient';
+import { apiClient } from './apiClient';
 import {
   AdminDashboardDto,
   DriverProfileDto,
@@ -22,10 +22,16 @@ export const AdminService = {
       completedRides: 0,
       cancelledRides: 0,
       activeRides: 0,
+      activePassengers: 0,
       totalRideValue: 0,
       platformCommission: 0,
       pendingDriverVerifications: 0,
     };
+  },
+
+  async getActivePassengers(): Promise<any[]> {
+    const res = await apiClient.get('/api/Admin/passengers/active');
+    return Array.isArray(res.data?.data) ? res.data.data : [];
   },
 
   // 2. Drivers

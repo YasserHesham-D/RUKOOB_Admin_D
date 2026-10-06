@@ -1,4 +1,5 @@
-﻿import React from 'react';
+import React, { useState } from 'react';
+import logoImg from './logo.png';
 
 interface LogoProps {
   size?: number | 'sm' | 'md' | 'lg' | 'xl';
@@ -7,6 +8,8 @@ interface LogoProps {
 }
 
 export const RukoobLogo: React.FC<LogoProps> = ({ size = 'md', showText = true, className = '' }) => {
+  const [hasError, setHasError] = useState(false);
+
   const pixelSize =
     typeof size === 'number'
       ? size
@@ -21,12 +24,24 @@ export const RukoobLogo: React.FC<LogoProps> = ({ size = 'md', showText = true, 
   return (
     <div className={`flex items-center gap-3 ${className}`}>
       {/* Official 3D Islamic Geometric Gold & Emerald Rukoob Logo */}
-      <img
-        src="/logo.png"
-        alt="RUKOOB Logo"
-        style={{ width: pixelSize, height: pixelSize }}
-        className="object-contain drop-shadow-md transition-transform hover:scale-105 shrink-0"
-      />
+      {!hasError ? (
+        <img
+          src={logoImg}
+          alt="RUKOOB"
+          onError={() => setHasError(true)}
+          style={{ width: pixelSize, height: pixelSize }}
+          className="object-contain drop-shadow-md transition-transform hover:scale-105 shrink-0"
+        />
+      ) : (
+        <div
+          style={{ width: pixelSize, height: pixelSize }}
+          className="rounded-2xl bg-gradient-to-br from-[#1B4D3E] via-[#0E2921] to-[#0A1C16] border border-[#C5A880]/60 shadow-md flex items-center justify-center shrink-0"
+        >
+          <span className="font-outfit font-black text-[#C5A880] text-xl tracking-tighter">
+            R
+          </span>
+        </div>
+      )}
 
       {showText && (
         <div className="flex flex-col select-none">
