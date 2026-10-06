@@ -15,8 +15,14 @@ import {
   Compass,
   MapPin,
   CheckCircle2,
+  XCircle,
   RotateCcw,
   Wallet,
+  TrendingUp,
+  Hourglass,
+  CheckCircle,
+  Activity,
+  Layers
 } from 'lucide-react';
 import {
   AreaChart,
@@ -76,7 +82,7 @@ export const Overview: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Active Filters
+  // Active Filters for Advanced Analytics
   const [timeRange, setTimeRange] = useState<'today' | 'week' | 'month' | 'all'>('all');
   const [vehicleType, setVehicleType] = useState<'all' | 'car' | 'moto'>('all');
   const [regionFilter, setRegionFilter] = useState<'all' | 'downtown' | 'corniche' | 'sahari' | 'airport'>('all');
@@ -191,7 +197,6 @@ export const Overview: React.FC = () => {
   }, [filteredRidesList]);
 
   // Real GMV: Gross Merchandise Value MUST only include completed transactions (and ongoing active rides).
-  // Cancelled rides NEVER contribute to GMV!
   const calculatedGMV = useMemo(() => {
     if (timeRange === 'all' && vehicleType === 'all' && regionFilter === 'all' && stats?.totalRideValue) {
       return stats.totalRideValue;
@@ -482,21 +487,259 @@ export const Overview: React.FC = () => {
     );
   }
 
+  // Exact core numbers from /api/Admin/dashboard
+  const totalTripsOfficial = (stats.completedRides || 0) + (stats.activeRides || 0) + (stats.cancelledRides || 0);
+  const inactiveDriversOfficial = Math.max(0, (stats.totalDrivers || 0) - (stats.activeDrivers || 0));
+
   return (
     <div className="space-y-6">
-      {/* Header & Dynamic Filter Ribbon */}
-      <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-bold font-cairo text-slate-900 dark:text-white tracking-wide flex items-center gap-3">
-            <Radio className="w-7 h-7 text-emerald-600 dark:text-emerald-400 animate-pulse" />
-            <span>لوحة تحكم وتحليلات الأعمال المركزية</span>
-          </h1>
-          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-            مؤشرات الأداء المالي الحقيقية، حجم التدفقات النقدية، وكفاءة التشغيل الميداني لسيارات وموتوسيكلات ركوب
-          </p>
+      {/* SECTION 1: OFFICIAL REAL LIVE METRICS (Matching Mobile Admin Exactly) */}
+      <div className="space-y-4">
+        {/* Top Header Strip with Refresh & Official Badge */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold font-cairo text-slate-900 dark:text-white flex items-center gap-2.5">
+              <Radio className="w-6 h-6 text-emerald-500 animate-pulse" />
+              <span>بوابة الإدارة المركزية (Admin) — المؤشرات المباشرة</span>
+            </h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              البيانات الحقيقية المسجلة في السيرفر الرسمي لتطبيق ركوب
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {/* Quick Status Pill matching Mobile Screen */}
+            <div className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-3 shadow-md border border-slate-800">
+              <span className="flex items-center gap-1.5 text-emerald-400">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                مكتملة ({stats.completedRides})
+              </span>
+              <span className="text-slate-600">|</span>
+              <span className="flex items-center gap-1.5 text-blue-400">
+                <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
+                جارية ({stats.activeRides})
+              </span>
+              <span className="text-slate-600">|</span>
+              <span className="flex items-center gap-1.5 text-rose-400">
+                <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
+                ملغاة ({stats.cancelledRides})
+              </span>
+            </div>
+
+            <button
+              onClick={handleRefresh}
+              className="p-2.5 rounded-xl bg-white dark:bg-rukoob-dark hover:bg-slate-100 dark:hover:bg-rukoob-forest text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-rukoob-forest/60 transition-colors flex items-center gap-1.5 text-xs font-bold shadow-sm"
+              title="تحديث البيانات اللحظية"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">تحديث</span>
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 w-full xl:w-auto">
+        {/* Top 2 Highlight Banners matching mobile cards */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Card A: الملخص المالي لعمليات المنصة 💰 */}
+          <div className="bg-[#111A16] dark:bg-[#0B110E] text-white p-5 rounded-2xl border border-emerald-900/40 shadow-lg space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold font-cairo flex items-center gap-2 text-rukoob-gold">
+                <span>الملخص المالي لعمليات المنصة 💰</span>
+              </h2>
+              <span className="text-[10px] bg-emerald-950/80 text-emerald-300 px-2 py-0.5 rounded-md border border-emerald-800/50">
+                مباشر من السيرفر
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {/* Box 1: Platform Revenue */}
+              <div className="bg-[#1A2621] p-4 rounded-xl border border-emerald-800/30 space-y-1">
+                <div className="flex items-center justify-between text-xs text-slate-300">
+                  <span>إيرادات المنصة</span>
+                  <TrendingUp className="w-4 h-4 text-emerald-400" />
+                </div>
+                <div className="text-xl sm:text-2xl font-bold font-mono text-emerald-400 tracking-tight">
+                  {stats.totalRideValue.toLocaleString()} ج.م
+                </div>
+                <div className="text-[10px] text-slate-400">إجمالي قيمة المشاوير المكتملة</div>
+              </div>
+
+              {/* Box 2: Net Commission */}
+              <div className="bg-[#1A2621] p-4 rounded-xl border border-amber-800/30 space-y-1">
+                <div className="flex items-center justify-between text-xs text-slate-300">
+                  <span>صافي العمولات</span>
+                  <Percent className="w-4 h-4 text-amber-400" />
+                </div>
+                <div className="text-xl sm:text-2xl font-bold font-mono text-amber-400 tracking-tight">
+                  {Math.round(stats.platformCommission).toLocaleString()} ج.م
+                </div>
+                <div className="text-[10px] text-slate-400">أرباح عمولة ركوب المحصلة</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card B: حالة أسطول الكباتن المسجلين 🚖 */}
+          <div className="card-glass p-5 rounded-2xl border border-slate-200 dark:border-rukoob-forest/40 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold font-cairo text-slate-900 dark:text-white flex items-center gap-2">
+                <span>حالة أسطول الكباتن المسجلين 🚖</span>
+              </h2>
+              <span className="text-[10px] text-slate-500 font-mono">
+                إجمالي {stats.totalDrivers} كابتن
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 text-center">
+              {/* Online */}
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40">
+                <span className="text-[11px] text-slate-600 dark:text-slate-400 block font-bold">متصلين الآن</span>
+                <div className="text-lg sm:text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1 flex items-center justify-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span>{stats.activeDrivers}</span>
+                </div>
+              </div>
+
+              {/* Offline */}
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-rukoob-darker/60 border border-slate-200 dark:border-slate-800">
+                <span className="text-[11px] text-slate-600 dark:text-slate-400 block font-bold">غير متصلين</span>
+                <div className="text-lg sm:text-xl font-bold font-mono text-slate-700 dark:text-slate-300 mt-1 flex items-center justify-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-slate-400" />
+                  <span>{inactiveDriversOfficial}</span>
+                </div>
+              </div>
+
+              {/* Pending Verifications */}
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40">
+                <span className="text-[11px] text-slate-600 dark:text-slate-400 block font-bold">طلبات جديدة</span>
+                <div className="text-lg sm:text-xl font-bold font-mono text-amber-600 dark:text-amber-400 mt-1 flex items-center justify-center gap-1.5">
+                  <Hourglass className="w-3.5 h-3.5 text-amber-500" />
+                  <span>{stats.pendingDriverVerifications}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* The 8 Official Core KPI Cards Grid (Direct from Database) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+          {/* 1. مجموع الكباتن */}
+          <div className="card-glass p-4 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between shadow-sm">
+            <div>
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-bold block">مجموع الكباتن</span>
+              <span className="text-xl lg:text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1 block">
+                {stats.totalDrivers}
+              </span>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-rukoob-forest/30 flex items-center justify-center text-rukoob-forest dark:text-rukoob-gold">
+              <Users className="w-5 h-5" />
+            </div>
+          </div>
+
+          {/* 2. كباتن متصلين الآن */}
+          <div className="card-glass p-4 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between shadow-sm">
+            <div>
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-bold block">كباتن متصلين الآن</span>
+              <span className="text-xl lg:text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1 block">
+                {stats.activeDrivers}
+              </span>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-500">
+              <Radio className="w-5 h-5" />
+            </div>
+          </div>
+
+          {/* 3. بانتظار التوثيق */}
+          <div className="card-glass p-4 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between shadow-sm">
+            <div>
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-bold block">بانتظار التوثيق</span>
+              <span className="text-xl lg:text-2xl font-bold font-mono text-amber-600 dark:text-amber-400 mt-1 block">
+                {stats.pendingDriverVerifications}
+              </span>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center text-amber-500">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+          </div>
+
+          {/* 4. إجمالي المشاوير */}
+          <div className="card-glass p-4 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between shadow-sm">
+            <div>
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-bold block">إجمالي المشاوير</span>
+              <span className="text-xl lg:text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1 block">
+                {totalTripsOfficial}
+              </span>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-rukoob-forest/30 flex items-center justify-center text-blue-500">
+              <Route className="w-5 h-5" />
+            </div>
+          </div>
+
+          {/* 5. مشاوير جارية */}
+          <div className="card-glass p-4 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between shadow-sm">
+            <div>
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-bold block">مشاوير جارية</span>
+              <span className="text-xl lg:text-2xl font-bold font-mono text-blue-600 dark:text-blue-400 mt-1 block">
+                {stats.activeRides}
+              </span>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 flex items-center justify-center text-blue-500">
+              <Car className="w-5 h-5" />
+            </div>
+          </div>
+
+          {/* 6. مشاوير مكتملة */}
+          <div className="card-glass p-4 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between shadow-sm">
+            <div>
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-bold block">مشاوير مكتملة</span>
+              <span className="text-xl lg:text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1 block">
+                {stats.completedRides}
+              </span>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-500">
+              <CheckCircle className="w-5 h-5" />
+            </div>
+          </div>
+
+          {/* 7. مشاوير ملغاة */}
+          <div className="card-glass p-4 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between shadow-sm">
+            <div>
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-bold block">مشاوير ملغاة</span>
+              <span className="text-xl lg:text-2xl font-bold font-mono text-rose-600 dark:text-rose-400 mt-1 block">
+                {stats.cancelledRides}
+              </span>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center text-rose-500">
+              <XCircle className="w-5 h-5" />
+            </div>
+          </div>
+
+          {/* 8. إجمالي الإيرادات */}
+          <div className="card-glass p-4 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between shadow-sm">
+            <div>
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-bold block">إجمالي الإيرادات</span>
+              <span className="text-xl lg:text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1 block">
+                {stats.totalRideValue.toLocaleString()} ج.م
+              </span>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-500">
+              <Wallet className="w-5 h-5" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION 2: ADVANCED ANALYTICAL FILTERS & DEEP DIVE (Optional Drilling) */}
+      <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-5">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-slate-900 dark:text-white font-cairo flex items-center gap-2">
+              <Layers className="w-5 h-5 text-rukoob-gold" />
+              <span>التحليلات التفصيلية والفلاتر الزمنية</span>
+            </h2>
+            <p className="text-xs text-slate-500">
+              تصفية الأرقام والرسوم البيانية حسب الفترات الزمنية، نوع المركبة، والنطاق الجغرافي في أسوان
+            </p>
+          </div>
+
           {/* Time Range Filter Tabs */}
           <div className="bg-white dark:bg-rukoob-dark p-1 rounded-xl border border-slate-200 dark:border-rukoob-forest/50 flex items-center shadow-sm">
             {[
@@ -518,432 +761,371 @@ export const Overview: React.FC = () => {
               </button>
             ))}
           </div>
-
-          {/* Refresh Button */}
-          <button
-            onClick={handleRefresh}
-            className="p-2.5 rounded-xl bg-slate-100 dark:bg-rukoob-forest/40 hover:bg-slate-200 dark:hover:bg-rukoob-forest text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-rukoob-forest/60 transition-colors flex items-center gap-1.5 text-xs font-bold shadow-sm"
-            title="تحديث البيانات اللحظية"
-          >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">تحديث</span>
-          </button>
         </div>
-      </div>
 
-      {/* Quick Segment Filter Strip (Car & Motorcycle Only) */}
-      <div className="card-glass p-3.5 rounded-2xl border border-slate-200 dark:border-rukoob-forest/40 flex flex-wrap items-center justify-between gap-3 text-xs shadow-sm">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] text-slate-600 dark:text-slate-400 font-bold flex items-center gap-1">
-            <Filter className="w-3.5 h-3.5 text-rukoob-forest-light dark:text-rukoob-gold" />
-            <span>نوع وسيلة النقل:</span>
-          </span>
-          {[
-            { id: 'all', label: 'الكل (سيارات وموتوسيكلات)' },
-            { id: 'car', label: 'سيارة ملاكي 🚗' },
-            { id: 'moto', label: 'موتوسيكل 🏍️' },
-          ].map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => setVehicleType(cat.id as any)}
-              className={`px-3 py-1.5 rounded-xl font-bold transition-all ${
-                vehicleType === cat.id
-                  ? 'bg-rukoob-forest dark:bg-rukoob-gold text-white dark:text-rukoob-dark shadow-sm'
-                  : 'bg-slate-100 dark:bg-rukoob-forest/20 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-rukoob-forest/40'
-              }`}
+        {/* Vehicle & Region Segment Ribbon */}
+        <div className="card-glass p-3.5 rounded-2xl border border-slate-200 dark:border-rukoob-forest/40 flex flex-wrap items-center justify-between gap-3 text-xs shadow-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] text-slate-600 dark:text-slate-400 font-bold flex items-center gap-1">
+              <Filter className="w-3.5 h-3.5 text-rukoob-forest-light dark:text-rukoob-gold" />
+              <span>نوع وسيلة النقل:</span>
+            </span>
+            {[
+              { id: 'all', label: 'الكل (سيارات وموتوسيكلات)' },
+              { id: 'car', label: 'سيارة ملاكي 🚗' },
+              { id: 'moto', label: 'موتوسيكل 🏍️' },
+            ].map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setVehicleType(cat.id as any)}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all ${
+                  vehicleType === cat.id
+                    ? 'bg-rukoob-forest dark:bg-rukoob-gold text-white dark:text-rukoob-dark shadow-sm'
+                    : 'bg-slate-100 dark:bg-rukoob-forest/20 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-rukoob-forest/40'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-slate-600 dark:text-slate-400 font-bold">نطاق المنطقة:</span>
+            <select
+              value={regionFilter}
+              onChange={(e) => setRegionFilter(e.target.value as any)}
+              className="px-3 py-1.5 bg-white dark:bg-rukoob-dark border border-slate-300 dark:border-rukoob-forest/50 text-slate-900 dark:text-white rounded-xl text-xs font-bold focus:outline-none focus:border-rukoob-forest dark:focus:border-rukoob-gold cursor-pointer"
             >
-              {cat.label}
-            </button>
-          ))}
-        </div>
+              <option value="all">كافة أنحاء أسوان</option>
+              <option value="downtown">وسط البلد والمحطة</option>
+              <option value="corniche">كورنيش النيل والفنادق</option>
+              <option value="sahari">صحاري ومجمع الجامعة</option>
+              <option value="airport">مطار أسوان وغرب سهيل</option>
+            </select>
 
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-slate-600 dark:text-slate-400 font-bold">نطاق المنطقة:</span>
-          <select
-            value={regionFilter}
-            onChange={(e) => setRegionFilter(e.target.value as any)}
-            className="px-3 py-1.5 bg-white dark:bg-rukoob-dark border border-slate-300 dark:border-rukoob-forest/50 text-slate-900 dark:text-white rounded-xl text-xs font-bold focus:outline-none focus:border-rukoob-forest dark:focus:border-rukoob-gold cursor-pointer"
-          >
-            <option value="all">كافة أنحاء أسوان</option>
-            <option value="downtown">وسط البلد والمحطة</option>
-            <option value="corniche">كورنيش النيل والفنادق</option>
-            <option value="sahari">صحاري ومجمع الجامعة</option>
-            <option value="airport">مطار أسوان وغرب سهيل</option>
-          </select>
-
-          {isAnyFilterActive && (
-            <button
-              onClick={handleResetFilters}
-              className="px-2.5 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/40 hover:bg-rose-100 font-bold flex items-center gap-1"
-              title="إعادة ضبط الفلاتر"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>إعادة ضبط</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Row 1: Primary Financial & Operational KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* GMV */}
-        <StatCard
-          title="إجمالي قيمة التداول (GMV)"
-          value={`${calculatedGMV.toLocaleString()} ج.م`}
-          subtitle="إجمالي قيمة الرحلات المكتملة"
-          icon={Banknote}
-          change="بيانات مالية حقيقية"
-          isPositive={true}
-          iconColor="text-emerald-500"
-        />
-
-        {/* Platform Net Commission */}
-        <StatCard
-          title="صافي أرباح المنصة (العمولة)"
-          value={`${calculatedCommission.toLocaleString()} ج.م`}
-          subtitle={`نسبة العمولة الفعلية: ${effectiveCommissionRate}%`}
-          icon={DollarSign}
-          change={`عمولة ${effectiveCommissionRate}%`}
-          isPositive={true}
-          iconColor="text-rukoob-gold"
-        />
-
-        {/* Driver Net Earnings */}
-        <StatCard
-          title="صافي دخل ومستحقات الكباتن"
-          value={`${driverNetEarnings.toLocaleString()} ج.م`}
-          subtitle="صافي أرباح السائقين بعد استقطاع العمولة"
-          icon={Wallet}
-          change="محافظ الكباتن"
-          isPositive={true}
-          iconColor="text-emerald-500"
-        />
-
-        {/* Average Order Value */}
-        <StatCard
-          title="متوسط قيمة الرحلة (AOV)"
-          value={`${averageTripValue} ج.م`}
-          subtitle="متوسط تكلفة الرحلة المكتملة"
-          icon={Percent}
-          change="معدل المشوار"
-          isPositive={true}
-          iconColor="text-blue-500"
-        />
-      </div>
-
-      {/* Row 2: Secondary Volume & Capacity KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Rides */}
-        <StatCard
-          title="إجمالي الرحلات والطلبات"
-          value={totalCalculatedRides.toLocaleString()}
-          subtitle={`مكتملة: ${calculatedCompletedRidesCount} | جارية: ${calculatedActiveRidesCount} | ملغاة: ${calculatedCancelledRidesCount}`}
-          icon={Route}
-          change={`${totalCalculatedRides} طلب`}
-          isPositive={true}
-          iconColor="text-rukoob-gold"
-        />
-
-        {/* Fulfillment Rate */}
-        <StatCard
-          title="معدل إنجاز الرحلات"
-          value={`${fulfillmentRate}%`}
-          subtitle={`ملغاة: ${calculatedCancelledRidesCount} رحلة (${calculatedCompletedRidesCount + calculatedCancelledRidesCount > 0 ? (100 - parseFloat(fulfillmentRate)).toFixed(1) : 0}%)`}
-          icon={CheckCircle2}
-          change={`${fulfillmentRate}% إنجاز`}
-          isPositive={parseFloat(fulfillmentRate) >= 50}
-          iconColor="text-blue-500"
-        />
-
-        {/* Total Drivers */}
-        <StatCard
-          title="أسطول الكباتن المعتمد"
-          value={stats.totalDrivers}
-          subtitle={`متصلون بالخدمة الآن: ${stats.activeDrivers} كابتن`}
-          icon={Car}
-          change={`${stats.activeDrivers} متصل حالياً`}
-          isPositive={true}
-          iconColor="text-emerald-500"
-        />
-
-        {/* Registered Passengers */}
-        <StatCard
-          title="قاعدة الركاب المسجلين"
-          value={stats.totalPassengers}
-          subtitle="مستخدمو تطبيق ركوب المعتمدون"
-          icon={Users}
-          change={`${stats.totalPassengers} عميل مسجل`}
-          isPositive={true}
-          iconColor="text-rukoob-gold"
-        />
-      </div>
-
-      {/* Row 3: Live Operations Quick Ribbon */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="card-glass p-3.5 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between text-xs">
-          <div>
-            <span className="text-slate-500 block text-[11px]">متوسط وقت وصول الكابتن (ETA)</span>
-            <span className="font-bold text-slate-900 dark:text-white font-mono text-sm text-emerald-600 dark:text-emerald-400">
-              {averageEta.value}
-            </span>
-            <span className="text-[10px] text-slate-400 block mt-0.5">{averageEta.subtitle}</span>
+            {isAnyFilterActive && (
+              <button
+                onClick={handleResetFilters}
+                className="px-2.5 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/40 hover:bg-rose-100 font-bold flex items-center gap-1"
+                title="إعادة ضبط الفلاتر"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>إعادة ضبط</span>
+              </button>
+            )}
           </div>
-          <Clock className="w-5 h-5 text-emerald-500 shrink-0" />
         </div>
 
-        <div className="card-glass p-3.5 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between text-xs">
-          <div>
-            <span className="text-slate-500 block text-[11px]">معدل قبول العروض (Acceptance)</span>
-            <span className="font-bold text-slate-900 dark:text-white font-mono text-sm text-blue-600 dark:text-blue-400">
-              {acceptanceRate}%
-            </span>
-            <span className="text-[10px] text-slate-400 block mt-0.5">نسبة قبول السائقين للطلبات</span>
-          </div>
-          <CheckCircle2 className="w-5 h-5 text-blue-500 shrink-0" />
+        {/* Filtered Primary KPIs */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            title="قيمة التداول المصفاة (GMV)"
+            value={`${calculatedGMV.toLocaleString()} ج.م`}
+            subtitle="قيمة الرحلات المكتملة في هذا النطاق"
+            icon={Banknote}
+            change="مبيعات المشاوير"
+            isPositive={true}
+            iconColor="text-emerald-500"
+          />
+
+          <StatCard
+            title="عمولة المنصة المصفاة"
+            value={`${calculatedCommission.toLocaleString()} ج.م`}
+            subtitle={`نسبة العمولة: ${effectiveCommissionRate}%`}
+            icon={DollarSign}
+            change={`عمولة ${effectiveCommissionRate}%`}
+            isPositive={true}
+            iconColor="text-rukoob-gold"
+          />
+
+          <StatCard
+            title="صافي مستحقات الكباتن"
+            value={`${driverNetEarnings.toLocaleString()} ج.م`}
+            subtitle="صافي السائقين بعد العمولة"
+            icon={Wallet}
+            change="محافظ السائقين"
+            isPositive={true}
+            iconColor="text-emerald-500"
+          />
+
+          <StatCard
+            title="متوسط قيمة الرحلة (AOV)"
+            value={`${averageTripValue} ج.م`}
+            subtitle="متوسط تكلفة الرحلة المكتملة"
+            icon={Percent}
+            change="معدل المشوار"
+            isPositive={true}
+            iconColor="text-blue-500"
+          />
         </div>
 
-        <div className="card-glass p-3.5 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between text-xs">
-          <div>
-            <span className="text-slate-500 block text-[11px]">متوسط مسافة المشوار</span>
-            <span className="font-bold text-slate-900 dark:text-white font-mono text-sm text-amber-600 dark:text-amber-400">
-              {averageDistance} كم
-            </span>
-            <span className="text-[10px] text-slate-400 block mt-0.5">محسوب بدقة الإحداثيات الفعلية</span>
-          </div>
-          <Compass className="w-5 h-5 text-amber-500 shrink-0" />
-        </div>
-
-        <div className="card-glass p-3.5 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between text-xs">
-          <div>
-            <span className="text-slate-500 block text-[11px]">طلبات توثيق بانتظار المراجعة</span>
-            <span className="font-bold text-slate-900 dark:text-white font-mono text-sm text-purple-600 dark:text-purple-400">
-              {stats.pendingDriverVerifications} كابتن
-            </span>
-            <span className="text-[10px] text-slate-400 block mt-0.5">كباتن بانتظار اعتماد المستندات</span>
-          </div>
-          <ShieldCheck className="w-5 h-5 text-purple-500 shrink-0" />
-        </div>
-      </div>
-
-      {/* Row 4: Dynamic Analytics Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Main Performance Chart */}
-        <div className="lg:col-span-8 card-glass p-6 rounded-2xl border border-slate-200 dark:border-rukoob-forest/40 space-y-4 shadow-sm">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        {/* Live Operational Metrics Ribbon (ETA, Acceptance, Distance) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="card-glass p-3.5 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between text-xs">
             <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white font-cairo">
-                تحليل منحنى النشاط والطلبات الفعلي
-              </h2>
-              <p className="text-xs text-slate-500">
-                متابعة حركة الطلبات والإيرادات المحققة في نطاق: {timeRange === 'today' ? 'اليوم' : timeRange === 'week' ? 'هذا الأسبوع' : timeRange === 'month' ? 'هذا الشهر' : 'كافة الأوقات'}
-              </p>
+              <span className="text-slate-500 block text-[11px]">متوسط وقت وصول الكابتن (ETA)</span>
+              <span className="font-bold text-slate-900 dark:text-white font-mono text-sm text-emerald-600 dark:text-emerald-400">
+                {averageEta.value}
+              </span>
+              <span className="text-[10px] text-slate-400 block mt-0.5">{averageEta.subtitle}</span>
             </div>
-
-            <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-rukoob-dark rounded-xl border border-slate-200 dark:border-rukoob-forest/50 text-xs">
-              <button
-                onClick={() => setChartMetric('rides')}
-                className={`px-3 py-1 rounded-lg font-bold transition-all ${
-                  chartMetric === 'rides'
-                    ? 'bg-rukoob-forest dark:bg-rukoob-gold text-white dark:text-rukoob-dark shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400'
-                }`}
-              >
-                عدد الرحلات
-              </button>
-              <button
-                onClick={() => setChartMetric('revenue')}
-                className={`px-3 py-1 rounded-lg font-bold transition-all ${
-                  chartMetric === 'revenue'
-                    ? 'bg-rukoob-forest dark:bg-rukoob-gold text-white dark:text-rukoob-dark shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400'
-                }`}
-              >
-                حجم التداول (ج.م)
-              </button>
-            </div>
+            <Clock className="w-5 h-5 text-emerald-500 shrink-0" />
           </div>
 
-          <div className="h-72 w-full pt-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#C5A880" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#C5A880" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <XAxis
-                  dataKey="time"
-                  stroke="#94a3b8"
-                  fontSize={11}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis
-                  stroke="#94a3b8"
-                  fontSize={11}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(val) => chartMetric === 'revenue' ? `${val} ج.م` : val}
-                />
-                <Tooltip
-                  formatter={(value: any) => [
-                    chartMetric === 'revenue' ? `${value} ج.م` : `${value} رحلة`,
-                    chartMetric === 'revenue' ? 'قيمة التداول الفعلي' : 'عدد الرحلات'
-                  ]}
-                  contentStyle={{
-                    backgroundColor: '#0E1512',
-                    borderColor: '#1B4D3E',
-                    borderRadius: '12px',
-                    color: '#fff',
-                    fontSize: '12px',
-                    direction: 'rtl',
-                  }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey={chartMetric}
-                  stroke="#C5A880"
-                  strokeWidth={3}
-                  fillOpacity={1}
-                  fill="url(#chartGradient)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+          <div className="card-glass p-3.5 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between text-xs">
+            <div>
+              <span className="text-slate-500 block text-[11px]">معدل قبول العروض (Acceptance)</span>
+              <span className="font-bold text-slate-900 dark:text-white font-mono text-sm text-blue-600 dark:text-blue-400">
+                {acceptanceRate}%
+              </span>
+              <span className="text-[10px] text-slate-400 block mt-0.5">نسبة قبول السائقين للطلبات</span>
+            </div>
+            <CheckCircle2 className="w-5 h-5 text-blue-500 shrink-0" />
+          </div>
+
+          <div className="card-glass p-3.5 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between text-xs">
+            <div>
+              <span className="text-slate-500 block text-[11px]">متوسط مسافة المشوار</span>
+              <span className="font-bold text-slate-900 dark:text-white font-mono text-sm text-amber-600 dark:text-amber-400">
+                {averageDistance} كم
+              </span>
+              <span className="text-[10px] text-slate-400 block mt-0.5">محسوب بدقة الإحداثيات الفعلية</span>
+            </div>
+            <Compass className="w-5 h-5 text-amber-500 shrink-0" />
+          </div>
+
+          <div className="card-glass p-3.5 rounded-xl border border-slate-200 dark:border-rukoob-forest/40 flex items-center justify-between text-xs">
+            <div>
+              <span className="text-slate-500 block text-[11px]">معدل إنجاز الرحلات</span>
+              <span className="font-bold text-slate-900 dark:text-white font-mono text-sm text-purple-600 dark:text-purple-400">
+                {fulfillmentRate}%
+              </span>
+              <span className="text-[10px] text-slate-400 block mt-0.5">نسبة الرحلات المكتملة بنجاح</span>
+            </div>
+            <Activity className="w-5 h-5 text-purple-500 shrink-0" />
           </div>
         </div>
 
-        {/* Fleet Breakdown & Trip Status */}
-        <div className="lg:col-span-4 space-y-6">
-          {/* Trip Status Donut */}
-          <div className="card-glass p-6 rounded-2xl border border-slate-200 dark:border-rukoob-forest/40 space-y-4 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white font-cairo">
-              توزيع حالات الرحلات
-            </h3>
-            <div className="h-44 flex items-center justify-center">
+        {/* Analytics Charts & Fleet Ratio */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Main Performance Chart */}
+          <div className="lg:col-span-8 card-glass p-6 rounded-2xl border border-slate-200 dark:border-rukoob-forest/40 space-y-4 shadow-sm">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white font-cairo">
+                  تحليل منحنى النشاط والطلبات الفعلي
+                </h3>
+                <p className="text-xs text-slate-500">
+                  متابعة حركة الطلبات والإيرادات في نطاق: {timeRange === 'today' ? 'اليوم' : timeRange === 'week' ? 'هذا الأسبوع' : timeRange === 'month' ? 'هذا الشهر' : 'كافة الأوقات'}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-rukoob-dark rounded-xl border border-slate-200 dark:border-rukoob-forest/50 text-xs">
+                <button
+                  onClick={() => setChartMetric('rides')}
+                  className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                    chartMetric === 'rides'
+                      ? 'bg-rukoob-forest dark:bg-rukoob-gold text-white dark:text-rukoob-dark shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  عدد الرحلات
+                </button>
+                <button
+                  onClick={() => setChartMetric('revenue')}
+                  className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                    chartMetric === 'revenue'
+                      ? 'bg-rukoob-forest dark:bg-rukoob-gold text-white dark:text-rukoob-dark shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  حجم التداول (ج.م)
+                </button>
+              </div>
+            </div>
+
+            <div className="h-72 w-full pt-4">
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={tripStatusData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={70}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {tripStatusData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
+                <AreaChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#C5A880" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#C5A880" stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis
+                    dataKey="time"
+                    stroke="#94a3b8"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    stroke="#94a3b8"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(val) => chartMetric === 'revenue' ? `${val} ج.م` : val}
+                  />
                   <Tooltip
+                    formatter={(value: any) => [
+                      chartMetric === 'revenue' ? `${value} ج.م` : `${value} رحلة`,
+                      chartMetric === 'revenue' ? 'قيمة التداول الفعلي' : 'عدد الرحلات'
+                    ]}
                     contentStyle={{
                       backgroundColor: '#0E1512',
                       borderColor: '#1B4D3E',
-                      borderRadius: '8px',
+                      borderRadius: '12px',
                       color: '#fff',
-                      fontSize: '11px',
+                      fontSize: '12px',
+                      direction: 'rtl',
                     }}
                   />
-                </PieChart>
+                  <Area
+                    type="monotone"
+                    dataKey={chartMetric}
+                    stroke="#C5A880"
+                    strokeWidth={3}
+                    fillOpacity={1}
+                    fill="url(#chartGradient)"
+                  />
+                </AreaChart>
               </ResponsiveContainer>
             </div>
-
-            <div className={`grid ${tripStatusData.length > 3 ? 'grid-cols-4' : 'grid-cols-3'} gap-2 text-center text-xs`}>
-              {tripStatusData.map((st) => (
-                <div key={st.name} className="p-2 rounded-xl bg-slate-50 dark:bg-rukoob-darker/60 border border-slate-200 dark:border-slate-800">
-                  <span className="text-[10px] text-slate-500 block truncate">{st.name}</span>
-                  <span className="font-bold text-slate-900 dark:text-white font-mono text-sm" style={{ color: st.color }}>
-                    {st.value}
-                  </span>
-                </div>
-              ))}
-            </div>
           </div>
 
-          {/* Vehicle Fleet Ratio */}
-          <div className="card-glass p-5 rounded-2xl border border-slate-200 dark:border-rukoob-forest/40 space-y-3 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white font-cairo flex items-center justify-between">
-              <span>توزيع أسطول النقل الميداني</span>
-              <span className="text-[10px] text-slate-400 font-mono">
-                {totalAssignedVehicles > 0 ? `${totalAssignedVehicles} رحلة معينة` : 'لا توجد مركبات معينة'}
-              </span>
-            </h3>
-            <div className="space-y-2 text-xs">
-              {vehicleSplitData.map((veh) => (
-                <div key={veh.name} className="space-y-1">
-                  <div className="flex justify-between text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-                    <span>{veh.name}</span>
-                    <span className="font-mono">
-                      {veh.value} رحلة {totalAssignedVehicles > 0 ? `(${Math.round((veh.value / totalAssignedVehicles) * 100)}%)` : ''}
-                    </span>
-                  </div>
-                  <div className="h-2 w-full bg-slate-100 dark:bg-rukoob-darker rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{
-                        width: `${totalAssignedVehicles > 0 ? (veh.value / totalAssignedVehicles) * 100 : 0}%`,
-                        backgroundColor: veh.color,
+          {/* Fleet Breakdown & Trip Status */}
+          <div className="lg:col-span-4 space-y-6">
+            {/* Trip Status Donut */}
+            <div className="card-glass p-6 rounded-2xl border border-slate-200 dark:border-rukoob-forest/40 space-y-4 shadow-sm">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white font-cairo">
+                توزيع حالات الرحلات
+              </h3>
+              <div className="h-44 flex items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={tripStatusData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={70}
+                      paddingAngle={5}
+                      dataKey="value"
+                    >
+                      {tripStatusData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#0E1512',
+                        borderColor: '#1B4D3E',
+                        borderRadius: '8px',
+                        color: '#fff',
+                        fontSize: '11px',
                       }}
                     />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className={`grid ${tripStatusData.length > 3 ? 'grid-cols-4' : 'grid-cols-3'} gap-2 text-center text-xs`}>
+                {tripStatusData.map((st) => (
+                  <div key={st.name} className="p-2 rounded-xl bg-slate-50 dark:bg-rukoob-darker/60 border border-slate-200 dark:border-slate-800">
+                    <span className="text-[10px] text-slate-500 block truncate">{st.name}</span>
+                    <span className="font-bold text-slate-900 dark:text-white font-mono text-sm" style={{ color: st.color }}>
+                      {st.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Vehicle Fleet Ratio */}
+            <div className="card-glass p-5 rounded-2xl border border-slate-200 dark:border-rukoob-forest/40 space-y-3 shadow-sm">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white font-cairo flex items-center justify-between">
+                <span>توزيع أسطول النقل الميداني</span>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {totalAssignedVehicles > 0 ? `${totalAssignedVehicles} رحلة معينة` : 'لا توجد مركبات معينة'}
+                </span>
+              </h3>
+              <div className="space-y-2 text-xs">
+                {vehicleSplitData.map((veh) => (
+                  <div key={veh.name} className="space-y-1">
+                    <div className="flex justify-between text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                      <span>{veh.name}</span>
+                      <span className="font-mono">
+                        {veh.value} رحلة {totalAssignedVehicles > 0 ? `(${Math.round((veh.value / totalAssignedVehicles) * 100)}%)` : ''}
+                      </span>
+                    </div>
+                    <div className="h-2 w-full bg-slate-100 dark:bg-rukoob-darker rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{
+                          width: `${totalAssignedVehicles > 0 ? (veh.value / totalAssignedVehicles) * 100 : 0}%`,
+                          backgroundColor: veh.color,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Hotspot Routes Table */}
+        <div className="card-glass p-6 rounded-2xl border border-slate-200 dark:border-rukoob-forest/40 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white font-cairo flex items-center gap-2">
+                <Compass className="w-4 h-4 text-rukoob-gold" />
+                <span>المسارات والخطوط الأكثر طلباً في أسوان (Hotspot Routes)</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                ترتيب المسارات الحقيقية بحسب عدد الرحلات المحققة ونسبة الطلب الفعلي
+              </p>
+            </div>
+            <Link
+              to="/trips"
+              className="text-xs font-bold text-rukoob-forest-light dark:text-rukoob-gold hover:underline flex items-center gap-1"
+            >
+              <span>سجل الرحلات الكامل</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            {popularRoutes.map((route, idx) => (
+              <div
+                key={idx}
+                className="p-3.5 rounded-xl bg-slate-50 dark:bg-rukoob-darker/60 border border-slate-200 dark:border-slate-800 space-y-2 hover:border-rukoob-gold/40 transition-colors"
+              >
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 font-bold border border-amber-500/20">
+                    {route.tag}
+                  </span>
+                  <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">
+                    {route.count} رحلة
+                  </span>
+                </div>
+                <div className="text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 text-slate-900 dark:text-white font-bold truncate">
+                    <MapPin className="w-3 h-3 text-emerald-500 shrink-0" />
+                    <span className="truncate">{route.from}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-slate-500 text-[11px] truncate">
+                    <Route className="w-3 h-3 text-rose-500 shrink-0" />
+                    <span className="truncate">{route.to}</span>
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Row 5: Real Popular Routes Table */}
-      <div className="card-glass p-6 rounded-2xl border border-slate-200 dark:border-rukoob-forest/40 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white font-cairo flex items-center gap-2">
-              <Compass className="w-4 h-4 text-rukoob-gold" />
-              <span>المسارات والخطوط الأكثر طلباً في أسوان (Hotspot Routes)</span>
-            </h3>
-            <p className="text-xs text-slate-500">
-              ترتيب المسارات الحقيقية بحسب عدد الرحلات المحققة ونسبة الطلب الفعلي
-            </p>
-          </div>
-          <Link
-            to="/trips"
-            className="text-xs font-bold text-rukoob-forest-light dark:text-rukoob-gold hover:underline flex items-center gap-1"
-          >
-            <span>سجل الرحلات الكامل</span>
-            <ArrowUpRight className="w-3.5 h-3.5" />
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          {popularRoutes.map((route, idx) => (
-            <div
-              key={idx}
-              className="p-3.5 rounded-xl bg-slate-50 dark:bg-rukoob-darker/60 border border-slate-200 dark:border-slate-800 space-y-2 hover:border-rukoob-gold/40 transition-colors"
-            >
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 font-bold border border-amber-500/20">
-                  {route.tag}
-                </span>
-                <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">
-                  {route.count} رحلة
-                </span>
-              </div>
-              <div className="text-xs space-y-1">
-                <div className="flex items-center gap-1.5 text-slate-900 dark:text-white font-bold truncate">
-                  <MapPin className="w-3 h-3 text-emerald-500 shrink-0" />
-                  <span className="truncate">{route.from}</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-slate-500 text-[11px] truncate">
-                  <Route className="w-3 h-3 text-rose-500 shrink-0" />
-                  <span className="truncate">{route.to}</span>
+                <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800/40">
+                  {route.subtitle}
                 </div>
               </div>
-              <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800/40">
-                {route.subtitle}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </div>
