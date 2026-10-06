@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { LucideIcon, TrendingUp, TrendingDown } from 'lucide-react';
 
 interface StatCardProps {
@@ -9,6 +9,7 @@ interface StatCardProps {
   isPositive?: boolean;
   subtitle?: string;
   iconColor?: string;
+  comparisonLabel?: string;
 }
 
 export const StatCard: React.FC<StatCardProps> = ({
@@ -19,6 +20,7 @@ export const StatCard: React.FC<StatCardProps> = ({
   isPositive = true,
   subtitle,
   iconColor = 'text-rukoob-gold',
+  comparisonLabel,
 }) => {
   return (
     <div className="card-glass p-5 rounded-2xl relative overflow-hidden transition-all duration-300 hover:border-rukoob-gold/60 group shadow-sm hover:shadow-md">
@@ -46,7 +48,7 @@ export const StatCard: React.FC<StatCardProps> = ({
               {change}
             </span>
           )}
-          <span className="text-slate-500 dark:text-slate-400">مقارنة بالأسبوع الماضي</span>
+          {comparisonLabel && <span className="text-slate-500 dark:text-slate-400">{comparisonLabel}</span>}
         </div>
       )}
     </div>

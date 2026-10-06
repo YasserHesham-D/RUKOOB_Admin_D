@@ -8,8 +8,6 @@ import {
   Users,
   ArrowUpRight,
   RefreshCw,
-  TrendingUp,
-  Calendar,
   Filter,
   DollarSign,
   Percent,
@@ -17,20 +15,12 @@ import {
   Compass,
   MapPin,
   CheckCircle2,
-  XCircle,
-  Activity,
-  Award,
-  Zap,
-  Layers,
-  Flame,
   RotateCcw,
-  Wallet
+  Wallet,
 } from 'lucide-react';
 import {
   AreaChart,
   Area,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   Tooltip,
@@ -40,11 +30,45 @@ import {
   Cell,
 } from 'recharts';
 import { StatCard } from '../components/common/StatCard';
-import { Badge } from '../components/common/Badge';
 import { AdminService } from '../api/adminService';
 import { AdminDashboardDto, RideDto } from '../types';
 import { useNotifications } from '../context/NotificationContext';
 import { Link } from 'react-router-dom';
+
+// Haversine formula to compute exact distance in Km between coordinates
+const calculateHaversineDistance = (
+  lat1?: number | null,
+  lon1?: number | null,
+  lat2?: number | null,
+  lon2?: number | null
+): number => {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
+  const R = 6371; // Earth's radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+// Formats messy raw coordinates or placeholders into readable location names
+const cleanAddress = (addr?: string | null): string => {
+  if (!addr) return 'موقع غير محدد';
+  const trimmed = addr.trim();
+  if (trimmed.includes('اسحب الخريطة')) {
+    return 'موقع محدد على الخريطة';
+  }
+  const match = trimmed.match(/(?:نقطة على الخريطة\s*)?\((\d+\.\d{2})\d*,\s*(\d+\.\d{2})\d*\)/);
+  if (match) {
+    return `إحداثيات (${match[1]}, ${match[2]})`;
+  }
+  return trimmed;
+};
 
 export const Overview: React.FC = () => {
   const [stats, setStats] = useState<AdminDashboardDto | null>(null);
@@ -97,7 +121,7 @@ export const Overview: React.FC = () => {
 
   const isAnyFilterActive = timeRange !== 'all' || vehicleType !== 'all' || regionFilter !== 'all';
 
-  // 100% Real-data filtering on active rides
+  // 100% Real data filtering on active rides
   const filteredRidesList = useMemo(() => {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -117,17 +141,21 @@ export const Overview: React.FC = () => {
         }
       }
 
-      // 2. Real Vehicle Type Filter (1: Sedan/Car, 4: Motorcycle)
+      // 2. Real Vehicle Type Filter (1: Car / Sedan, 4: Motorcycle)
+      const isMoto =
+        ride.driverVehicle?.vehicleType === 4 ||
+        (ride.driverVehicle?.make && (
+          ride.driverVehicle.make.toLowerCase().includes('moto') ||
+          ride.driverVehicle.make.toLowerCase().includes('hojan') ||
+          ride.driverVehicle.make.toLowerCase().includes('dayun') ||
+          ride.driverVehicle.make.toLowerCase().includes('hawa')
+        ));
+
       if (vehicleType === 'car') {
-        const isMoto =
-          ride.driverVehicle?.vehicleType === 4 ||
-          (ride.driverVehicle?.make && ride.driverVehicle.make.toLowerCase().includes('moto'));
         if (isMoto) return false;
+        if (ride.driverVehicle && ride.driverVehicle.vehicleType !== 1) return false;
       } else if (vehicleType === 'moto') {
-        const isMoto =
-          ride.driverVehicle?.vehicleType === 4 ||
-          (ride.driverVehicle?.make && ride.driverVehicle.make.toLowerCase().includes('moto'));
-        if (!isMoto && ride.driverVehicle) return false;
+        if (!isMoto) return false;
       }
 
       // 3. Real Region Filter
@@ -149,38 +177,59 @@ export const Overview: React.FC = () => {
   }, [filteredRidesList]);
 
   const activeRides = useMemo(() => {
-    return filteredRidesList.filter((r) => r.status === 5 || r.status === 4 || r.status === 3 || r.status === 2);
+    return filteredRidesList.filter(
+      (r) => (r.status === 5 || r.status === 4 || r.status === 3 || r.status === 2) && !r.completedAt && !r.cancelledAt
+    );
   }, [filteredRidesList]);
 
   const cancelledRides = useMemo(() => {
     return filteredRidesList.filter((r) => r.status === 7 || r.status === 8 || !!r.cancelledAt);
   }, [filteredRidesList]);
 
-  // Real KPIs calculation
+  const pendingRides = useMemo(() => {
+    return filteredRidesList.filter((r) => (r.status === 1 || r.status === 0) && !r.completedAt && !r.cancelledAt);
+  }, [filteredRidesList]);
+
+  // Real GMV: Gross Merchandise Value MUST only include completed transactions (and ongoing active rides).
+  // Cancelled rides NEVER contribute to GMV!
   const calculatedGMV = useMemo(() => {
-    const sum = filteredRidesList.reduce((acc, r) => acc + (r.finalPrice || r.offeredPrice || 0), 0);
-    if (sum === 0 && timeRange === 'all' && vehicleType === 'all' && regionFilter === 'all' && stats?.totalRideValue) {
+    if (timeRange === 'all' && vehicleType === 'all' && regionFilter === 'all' && stats?.totalRideValue) {
       return stats.totalRideValue;
     }
-    return sum;
-  }, [filteredRidesList, timeRange, vehicleType, regionFilter, stats]);
+    const sumCompleted = completedRides.reduce((acc, r) => acc + (r.finalPrice || r.offeredPrice || 0), 0);
+    const sumActive = activeRides.reduce((acc, r) => acc + (r.finalPrice || r.offeredPrice || 0), 0);
+    return sumCompleted + sumActive;
+  }, [completedRides, activeRides, timeRange, vehicleType, regionFilter, stats]);
 
+  // Real Commission: Platform fee collected strictly from completed rides
   const calculatedCommission = useMemo(() => {
-    const sum = filteredRidesList.reduce((acc, r) => {
-      if (r.commissionAmount) return acc + r.commissionAmount;
-      const price = r.finalPrice || r.offeredPrice || 0;
-      return acc + (price * (r.commissionRate || 0.05));
-    }, 0);
-    if (sum === 0 && timeRange === 'all' && vehicleType === 'all' && regionFilter === 'all' && stats?.platformCommission) {
-      return stats.platformCommission;
+    if (timeRange === 'all' && vehicleType === 'all' && regionFilter === 'all' && stats?.platformCommission) {
+      return Math.round(stats.platformCommission * 10) / 10;
     }
-    return Math.round(sum);
-  }, [filteredRidesList, timeRange, vehicleType, regionFilter, stats]);
+    const sum = completedRides.reduce((acc, r) => {
+      if (typeof r.commissionAmount === 'number' && r.commissionAmount > 0) {
+        return acc + r.commissionAmount;
+      }
+      const price = r.finalPrice || r.offeredPrice || 0;
+      return acc + (price * (r.commissionRate || 0.08));
+    }, 0);
+    return Math.round(sum * 10) / 10;
+  }, [completedRides, timeRange, vehicleType, regionFilter, stats]);
 
+  // Real Driver Net Earnings: GMV minus Platform Commission
   const driverNetEarnings = useMemo(() => {
-    return Math.max(0, calculatedGMV - calculatedCommission);
+    return Math.max(0, Math.round((calculatedGMV - calculatedCommission) * 10) / 10);
   }, [calculatedGMV, calculatedCommission]);
 
+  // Real Effective Commission Percentage
+  const effectiveCommissionRate = useMemo(() => {
+    if (calculatedGMV > 0) {
+      return ((calculatedCommission / calculatedGMV) * 100).toFixed(0);
+    }
+    return '8';
+  }, [calculatedGMV, calculatedCommission]);
+
+  // Real Ride Counts
   const totalCalculatedRides = useMemo(() => {
     if (filteredRidesList.length === 0 && timeRange === 'all' && vehicleType === 'all' && regionFilter === 'all') {
       return (stats?.completedRides || 0) + (stats?.activeRides || 0) + (stats?.cancelledRides || 0);
@@ -189,49 +238,106 @@ export const Overview: React.FC = () => {
   }, [filteredRidesList, timeRange, vehicleType, regionFilter, stats]);
 
   const calculatedCompletedRidesCount = useMemo(() => {
-    if (filteredRidesList.length === 0 && timeRange === 'all' && vehicleType === 'all' && regionFilter === 'all') {
-      return stats?.completedRides || 0;
+    if (timeRange === 'all' && vehicleType === 'all' && regionFilter === 'all' && stats?.completedRides !== undefined) {
+      return stats.completedRides;
     }
     return completedRides.length;
-  }, [filteredRidesList, completedRides, timeRange, vehicleType, regionFilter, stats]);
+  }, [completedRides, timeRange, vehicleType, regionFilter, stats]);
 
   const calculatedActiveRidesCount = useMemo(() => {
-    if (filteredRidesList.length === 0 && timeRange === 'all' && vehicleType === 'all' && regionFilter === 'all') {
-      return stats?.activeRides || 0;
+    if (timeRange === 'all' && vehicleType === 'all' && regionFilter === 'all' && stats?.activeRides !== undefined) {
+      return stats.activeRides;
     }
     return activeRides.length;
-  }, [filteredRidesList, activeRides, timeRange, vehicleType, regionFilter, stats]);
+  }, [activeRides, timeRange, vehicleType, regionFilter, stats]);
 
   const calculatedCancelledRidesCount = useMemo(() => {
-    if (filteredRidesList.length === 0 && timeRange === 'all' && vehicleType === 'all' && regionFilter === 'all') {
-      return stats?.cancelledRides || 0;
+    if (timeRange === 'all' && vehicleType === 'all' && regionFilter === 'all' && stats?.cancelledRides !== undefined) {
+      return stats.cancelledRides;
     }
     return cancelledRides.length;
-  }, [filteredRidesList, cancelledRides, timeRange, vehicleType, regionFilter, stats]);
+  }, [cancelledRides, timeRange, vehicleType, regionFilter, stats]);
 
+  // Real Fulfillment Rate: Completed rides / Finished rides
   const fulfillmentRate = useMemo(() => {
     const finished = calculatedCompletedRidesCount + calculatedCancelledRidesCount;
     if (finished === 0) return calculatedCompletedRidesCount > 0 ? '100.0' : '0.0';
     return ((calculatedCompletedRidesCount / finished) * 100).toFixed(1);
   }, [calculatedCompletedRidesCount, calculatedCancelledRidesCount]);
 
+  // Real Average Order Value (AOV): GMV divided by completed rides
   const averageTripValue = useMemo(() => {
     if (calculatedCompletedRidesCount === 0) {
-      return totalCalculatedRides > 0 ? Math.round(calculatedGMV / totalCalculatedRides) : 0;
+      return 0;
     }
     return Math.round(calculatedGMV / calculatedCompletedRidesCount);
-  }, [calculatedGMV, calculatedCompletedRidesCount, totalCalculatedRides]);
+  }, [calculatedGMV, calculatedCompletedRidesCount]);
 
-  const averageDistance = useMemo(() => {
+  // Real Average Driver Arrival Time (ETA): calculated from actual acceptedAt -> driverArrivedAt timestamps
+  const averageEta = useMemo(() => {
+    const diffs: number[] = [];
+    filteredRidesList.forEach((r) => {
+      if (r.acceptedAt && r.driverArrivedAt) {
+        const diffMs = new Date(r.driverArrivedAt).getTime() - new Date(r.acceptedAt).getTime();
+        const diffSec = diffMs / 1000;
+        if (diffSec > 0 && diffSec < 7200) {
+          diffs.push(diffSec);
+        }
+      }
+    });
+
+    if (diffs.length === 0) {
+      return { value: '—', subtitle: 'لا تتوفر توقيتات وصول في هذه الفترة' };
+    }
+
+    const avgSec = diffs.reduce((a, b) => a + b, 0) / diffs.length;
+    if (avgSec < 60) {
+      return {
+        value: `${Math.round(avgSec)} ثانية`,
+        subtitle: `حساب فعلي من ${diffs.length} رحلة`
+      };
+    }
+    return {
+      value: `${(avgSec / 60).toFixed(1)} دقيقة`,
+      subtitle: `حساب فعلي من ${diffs.length} رحلة`
+    };
+  }, [filteredRidesList]);
+
+  // Real Acceptance Rate: Percentage of ride requests accepted by a driver
+  const acceptanceRate = useMemo(() => {
     if (filteredRidesList.length === 0) return '0.0';
-    const totalDist = filteredRidesList.reduce((acc, r) => acc + (r.distanceKm || 0), 0);
-    return (totalDist / filteredRidesList.length).toFixed(1);
+    const acceptedCount = filteredRidesList.filter(
+      (r) => !!r.acceptedAt || !!r.driverId || (r.status >= 2 && r.status !== 1 && r.status !== 0)
+    ).length;
+    return ((acceptedCount / filteredRidesList.length) * 100).toFixed(1);
+  }, [filteredRidesList]);
+
+  // Real Average Trip Distance: calculated using Haversine formula on pickup and destination coordinates
+  const averageDistance = useMemo(() => {
+    const distances: number[] = [];
+    filteredRidesList.forEach((r) => {
+      let d = r.distanceKm;
+      if (!d || d <= 0) {
+        d = calculateHaversineDistance(
+          r.pickup?.latitude,
+          r.pickup?.longitude,
+          r.destination?.latitude,
+          r.destination?.longitude
+        );
+      }
+      if (d > 0) {
+        distances.push(d);
+      }
+    });
+
+    if (distances.length === 0) return '0.0';
+    const avg = distances.reduce((a, b) => a + b, 0) / distances.length;
+    return avg.toFixed(1);
   }, [filteredRidesList]);
 
   // Real Hourly / Daily Trend Chart Data from actual rides
   const trendData = useMemo(() => {
     if (timeRange === 'today') {
-      // Group by hour
       const hours = ['06:00', '09:00', '12:00', '15:00', '18:00', '21:00', '00:00'];
       return hours.map((hourLabel) => {
         const hourNum = parseInt(hourLabel.split(':')[0], 10);
@@ -240,13 +346,14 @@ export const Overview: React.FC = () => {
           return Math.abs(d.getHours() - hourNum) <= 1;
         });
         const ridesCount = matched.length;
-        const revenue = matched.reduce((acc, r) => acc + (r.finalPrice || r.offeredPrice || 0), 0);
+        const revenue = matched
+          .filter((r) => r.status === 6 || !!r.completedAt)
+          .reduce((acc, r) => acc + (r.finalPrice || r.offeredPrice || 0), 0);
         return { time: hourLabel, rides: ridesCount, revenue };
       });
     }
 
     if (timeRange === 'week') {
-      // Group by day of week
       const days = ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
       const dayMap: Record<number, string> = { 6: 'السبت', 0: 'الأحد', 1: 'الإثنين', 2: 'الثلاثاء', 3: 'الأربعاء', 4: 'الخميس', 5: 'الجمعة' };
       return days.map((dayName) => {
@@ -255,38 +362,54 @@ export const Overview: React.FC = () => {
           return dayMap[d.getDay()] === dayName;
         });
         const ridesCount = matched.length;
-        const revenue = matched.reduce((acc, r) => acc + (r.finalPrice || r.offeredPrice || 0), 0);
+        const revenue = matched
+          .filter((r) => r.status === 6 || !!r.completedAt)
+          .reduce((acc, r) => acc + (r.finalPrice || r.offeredPrice || 0), 0);
         return { time: dayName, rides: ridesCount, revenue };
       });
     }
 
-    // Month or All Time: Group into 4 weekly buckets
-    const buckets = ['الأسبوع 1', 'الأسبوع 2', 'الأسبوع 3', 'الأسبوع 4'];
-    const quarter = Math.ceil(filteredRidesList.length / 4) || 1;
-    return buckets.map((bName, idx) => {
-      const slice = filteredRidesList.slice(idx * quarter, (idx + 1) * quarter);
-      const ridesCount = slice.length;
-      const revenue = slice.reduce((acc, r) => acc + (r.finalPrice || r.offeredPrice || 0), 0);
-      return { time: bName, rides: ridesCount, revenue };
+    // Month or All Time: Group into 4 time buckets
+    const now = new Date().getTime();
+    const oneWeek = 7 * 24 * 60 * 60 * 1000;
+    const buckets = [
+      { label: 'منذ شهر', from: now - 4 * oneWeek, to: now - 3 * oneWeek },
+      { label: 'منذ 3 أسابيع', from: now - 3 * oneWeek, to: now - 2 * oneWeek },
+      { label: 'منذ أسبوعين', from: now - 2 * oneWeek, to: now - oneWeek },
+      { label: 'هذا الأسبوع', from: now - oneWeek, to: now + oneWeek },
+    ];
+
+    return buckets.map((b) => {
+      const matched = filteredRidesList.filter((r) => {
+        const t = new Date(r.createdAt).getTime();
+        return t >= b.from && t < b.to;
+      });
+      const ridesCount = matched.length;
+      const revenue = matched
+        .filter((r) => r.status === 6 || !!r.completedAt)
+        .reduce((acc, r) => acc + (r.finalPrice || r.offeredPrice || 0), 0);
+      return { time: b.label, rides: ridesCount, revenue };
     });
   }, [filteredRidesList, timeRange]);
 
-  // Real Fleet Split (Cars vs Moto)
+  // Real Fleet Split based solely on assigned vehicle rides
   const vehicleSplitData = useMemo(() => {
     let cars = 0;
     let motos = 0;
 
     filteredRidesList.forEach((r) => {
+      if (!r.driverVehicle) return;
       const isMoto =
-        r.driverVehicle?.vehicleType === 4 ||
-        (r.driverVehicle?.make && r.driverVehicle.make.toLowerCase().includes('moto'));
+        r.driverVehicle.vehicleType === 4 ||
+        (r.driverVehicle.make && (
+          r.driverVehicle.make.toLowerCase().includes('moto') ||
+          r.driverVehicle.make.toLowerCase().includes('hojan') ||
+          r.driverVehicle.make.toLowerCase().includes('dayun') ||
+          r.driverVehicle.make.toLowerCase().includes('hawa')
+        ));
       if (isMoto) motos++;
       else cars++;
     });
-
-    if (cars === 0 && motos === 0) {
-      cars = 1;
-    }
 
     if (vehicleType === 'car') {
       return [{ name: 'سيارة ملاكي (Cars)', value: cars, color: '#1B4D3E' }];
@@ -301,43 +424,55 @@ export const Overview: React.FC = () => {
     ];
   }, [filteredRidesList, vehicleType]);
 
+  const totalAssignedVehicles = useMemo(() => {
+    return vehicleSplitData.reduce((acc, v) => acc + v.value, 0);
+  }, [vehicleSplitData]);
+
   // Real Popular Routes from actual rides
   const popularRoutes = useMemo(() => {
-    const routeCounts: Record<string, { from: string; to: string; count: number }> = {};
+    const routeCounts: Record<string, { from: string; to: string; count: number; totalFare: number }> = {};
 
     filteredRidesList.forEach((r) => {
-      const from = r.pickup?.address?.trim() || 'نقطة الانطلاق';
-      const to = r.destination?.address?.trim() || 'الوجهة';
+      const from = cleanAddress(r.pickup?.address);
+      const to = cleanAddress(r.destination?.address);
       const key = `${from}➔${to}`;
       if (!routeCounts[key]) {
-        routeCounts[key] = { from, to, count: 0 };
+        routeCounts[key] = { from, to, count: 0, totalFare: 0 };
       }
       routeCounts[key].count++;
+      routeCounts[key].totalFare += (r.finalPrice || r.offeredPrice || 0);
     });
 
     const sorted = Object.values(routeCounts).sort((a, b) => b.count - a.count);
     if (sorted.length > 0) {
-      return sorted.slice(0, 4).map((item, idx) => ({
-        ...item,
-        growth: idx === 0 ? '+15%' : idx === 1 ? '+10%' : '+5%',
-        tag: idx === 0 ? 'الأعلى طلباً' : 'نشط'
-      }));
+      return sorted.slice(0, 4).map((item, idx) => {
+        const percent = Math.round((item.count / Math.max(1, filteredRidesList.length)) * 100);
+        const avgFare = Math.round(item.totalFare / item.count);
+        return {
+          ...item,
+          subtitle: `${percent}% من الطلبات (${avgFare} ج.م متوسط)`,
+          tag: idx === 0 ? 'الأعلى طلباً' : idx === 1 ? 'خط رئيسي' : 'نشط'
+        };
+      });
     }
 
     return [
-      { from: 'محطة قطار أسوان', to: 'كورنيش النيل والفنادق', count: filteredRidesList.length, growth: 'مباشر', tag: 'نشط' },
-      { from: 'جامعة أسوان (صحاري)', to: 'موقف الأقاليم العمومي', count: Math.max(0, filteredRidesList.length - 1), growth: 'مباشر', tag: 'جامعي' },
+      { from: 'محطة قطار أسوان', to: 'كورنيش النيل والفنادق', count: 0, subtitle: 'لا توجد رحلات', tag: 'خامل' },
     ];
   }, [filteredRidesList]);
 
   // Donut Chart Status Breakdown from real data
   const tripStatusData = useMemo(() => {
-    return [
+    const data = [
       { name: 'مكتملة', value: calculatedCompletedRidesCount, color: '#10B981' },
       { name: 'نشطة حالياً', value: calculatedActiveRidesCount, color: '#3B82F6' },
       { name: 'ملغاة', value: calculatedCancelledRidesCount, color: '#EF4444' },
     ];
-  }, [calculatedCompletedRidesCount, calculatedActiveRidesCount, calculatedCancelledRidesCount]);
+    if (pendingRides.length > 0) {
+      data.push({ name: 'قيد البحث', value: pendingRides.length, color: '#F59E0B' });
+    }
+    return data;
+  }, [calculatedCompletedRidesCount, calculatedActiveRidesCount, calculatedCancelledRidesCount, pendingRides]);
 
   if (loading || !stats) {
     return (
@@ -455,9 +590,9 @@ export const Overview: React.FC = () => {
         <StatCard
           title="إجمالي قيمة التداول (GMV)"
           value={`${calculatedGMV.toLocaleString()} ج.م`}
-          subtitle="إجمالي المعاملات الفعلية"
+          subtitle="إجمالي قيمة الرحلات المكتملة"
           icon={Banknote}
-          change="بيانات فعلية"
+          change="بيانات مالية حقيقية"
           isPositive={true}
           iconColor="text-emerald-500"
         />
@@ -466,9 +601,9 @@ export const Overview: React.FC = () => {
         <StatCard
           title="صافي أرباح المنصة (العمولة)"
           value={`${calculatedCommission.toLocaleString()} ج.م`}
-          subtitle="نسبة عمولة المنصة: 5%"
+          subtitle={`نسبة العمولة الفعلية: ${effectiveCommissionRate}%`}
           icon={DollarSign}
-          change="عمولة 5%"
+          change={`عمولة ${effectiveCommissionRate}%`}
           isPositive={true}
           iconColor="text-rukoob-gold"
         />
@@ -477,7 +612,7 @@ export const Overview: React.FC = () => {
         <StatCard
           title="صافي دخل ومستحقات الكباتن"
           value={`${driverNetEarnings.toLocaleString()} ج.م`}
-          subtitle="أرباح السائقين الصافية بعد العمولة"
+          subtitle="صافي أرباح السائقين بعد استقطاع العمولة"
           icon={Wallet}
           change="محافظ الكباتن"
           isPositive={true}
@@ -488,9 +623,9 @@ export const Overview: React.FC = () => {
         <StatCard
           title="متوسط قيمة الرحلة (AOV)"
           value={`${averageTripValue} ج.م`}
-          subtitle="متوسط تكلفة المشوار للعميل"
+          subtitle="متوسط تكلفة الرحلة المكتملة"
           icon={Percent}
-          change="معدل الرحلة"
+          change="معدل المشوار"
           isPositive={true}
           iconColor="text-blue-500"
         />
@@ -502,7 +637,7 @@ export const Overview: React.FC = () => {
         <StatCard
           title="إجمالي الرحلات والطلبات"
           value={totalCalculatedRides.toLocaleString()}
-          subtitle={`مكتملة: ${calculatedCompletedRidesCount} | جارية: ${calculatedActiveRidesCount}`}
+          subtitle={`مكتملة: ${calculatedCompletedRidesCount} | جارية: ${calculatedActiveRidesCount} | ملغاة: ${calculatedCancelledRidesCount}`}
           icon={Route}
           change={`${totalCalculatedRides} طلب`}
           isPositive={true}
@@ -513,10 +648,10 @@ export const Overview: React.FC = () => {
         <StatCard
           title="معدل إنجاز الرحلات"
           value={`${fulfillmentRate}%`}
-          subtitle={`ملغاة: ${calculatedCancelledRidesCount} رحلة`}
+          subtitle={`ملغاة: ${calculatedCancelledRidesCount} رحلة (${calculatedCompletedRidesCount + calculatedCancelledRidesCount > 0 ? (100 - parseFloat(fulfillmentRate)).toFixed(1) : 0}%)`}
           icon={CheckCircle2}
           change={`${fulfillmentRate}% إنجاز`}
-          isPositive={parseFloat(fulfillmentRate) >= 80}
+          isPositive={parseFloat(fulfillmentRate) >= 50}
           iconColor="text-blue-500"
         />
 
@@ -526,7 +661,7 @@ export const Overview: React.FC = () => {
           value={stats.totalDrivers}
           subtitle={`متصلون بالخدمة الآن: ${stats.activeDrivers} كابتن`}
           icon={Car}
-          change={`${stats.activeDrivers} نشط`}
+          change={`${stats.activeDrivers} متصل حالياً`}
           isPositive={true}
           iconColor="text-emerald-500"
         />
@@ -535,9 +670,9 @@ export const Overview: React.FC = () => {
         <StatCard
           title="قاعدة الركاب المسجلين"
           value={stats.totalPassengers}
-          subtitle="مستخدمو تطبيق ركوب"
+          subtitle="مستخدمو تطبيق ركوب المعتمدون"
           icon={Users}
-          change="عملاء مسجلين"
+          change={`${stats.totalPassengers} عميل مسجل`}
           isPositive={true}
           iconColor="text-rukoob-gold"
         />
@@ -549,8 +684,9 @@ export const Overview: React.FC = () => {
           <div>
             <span className="text-slate-500 block text-[11px]">متوسط وقت وصول الكابتن (ETA)</span>
             <span className="font-bold text-slate-900 dark:text-white font-mono text-sm text-emerald-600 dark:text-emerald-400">
-              4.2 دقيقة
+              {averageEta.value}
             </span>
+            <span className="text-[10px] text-slate-400 block mt-0.5">{averageEta.subtitle}</span>
           </div>
           <Clock className="w-5 h-5 text-emerald-500 shrink-0" />
         </div>
@@ -559,8 +695,9 @@ export const Overview: React.FC = () => {
           <div>
             <span className="text-slate-500 block text-[11px]">معدل قبول العروض (Acceptance)</span>
             <span className="font-bold text-slate-900 dark:text-white font-mono text-sm text-blue-600 dark:text-blue-400">
-              {fulfillmentRate}%
+              {acceptanceRate}%
             </span>
+            <span className="text-[10px] text-slate-400 block mt-0.5">نسبة قبول السائقين للطلبات</span>
           </div>
           <CheckCircle2 className="w-5 h-5 text-blue-500 shrink-0" />
         </div>
@@ -571,6 +708,7 @@ export const Overview: React.FC = () => {
             <span className="font-bold text-slate-900 dark:text-white font-mono text-sm text-amber-600 dark:text-amber-400">
               {averageDistance} كم
             </span>
+            <span className="text-[10px] text-slate-400 block mt-0.5">محسوب بدقة الإحداثيات الفعلية</span>
           </div>
           <Compass className="w-5 h-5 text-amber-500 shrink-0" />
         </div>
@@ -581,6 +719,7 @@ export const Overview: React.FC = () => {
             <span className="font-bold text-slate-900 dark:text-white font-mono text-sm text-purple-600 dark:text-purple-400">
               {stats.pendingDriverVerifications} كابتن
             </span>
+            <span className="text-[10px] text-slate-400 block mt-0.5">كباتن بانتظار اعتماد المستندات</span>
           </div>
           <ShieldCheck className="w-5 h-5 text-purple-500 shrink-0" />
         </div>
@@ -648,6 +787,10 @@ export const Overview: React.FC = () => {
                   tickFormatter={(val) => chartMetric === 'revenue' ? `${val} ج.م` : val}
                 />
                 <Tooltip
+                  formatter={(value: any) => [
+                    chartMetric === 'revenue' ? `${value} ج.م` : `${value} رحلة`,
+                    chartMetric === 'revenue' ? 'قيمة التداول الفعلي' : 'عدد الرحلات'
+                  ]}
                   contentStyle={{
                     backgroundColor: '#0E1512',
                     borderColor: '#1B4D3E',
@@ -706,7 +849,7 @@ export const Overview: React.FC = () => {
               </ResponsiveContainer>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 text-center text-xs">
+            <div className={`grid ${tripStatusData.length > 3 ? 'grid-cols-4' : 'grid-cols-3'} gap-2 text-center text-xs`}>
               {tripStatusData.map((st) => (
                 <div key={st.name} className="p-2 rounded-xl bg-slate-50 dark:bg-rukoob-darker/60 border border-slate-200 dark:border-slate-800">
                   <span className="text-[10px] text-slate-500 block truncate">{st.name}</span>
@@ -722,20 +865,24 @@ export const Overview: React.FC = () => {
           <div className="card-glass p-5 rounded-2xl border border-slate-200 dark:border-rukoob-forest/40 space-y-3 shadow-sm">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white font-cairo flex items-center justify-between">
               <span>توزيع أسطول النقل الميداني</span>
-              <span className="text-[10px] text-slate-400 font-mono">سيارات وموتوسيكلات</span>
+              <span className="text-[10px] text-slate-400 font-mono">
+                {totalAssignedVehicles > 0 ? `${totalAssignedVehicles} رحلة معينة` : 'لا توجد مركبات معينة'}
+              </span>
             </h3>
             <div className="space-y-2 text-xs">
               {vehicleSplitData.map((veh) => (
                 <div key={veh.name} className="space-y-1">
                   <div className="flex justify-between text-[11px] font-semibold text-slate-700 dark:text-slate-300">
                     <span>{veh.name}</span>
-                    <span className="font-mono">{veh.value} رحلة</span>
+                    <span className="font-mono">
+                      {veh.value} رحلة {totalAssignedVehicles > 0 ? `(${Math.round((veh.value / totalAssignedVehicles) * 100)}%)` : ''}
+                    </span>
                   </div>
                   <div className="h-2 w-full bg-slate-100 dark:bg-rukoob-darker rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-500"
                       style={{
-                        width: `${Math.min(100, Math.max(15, (veh.value / Math.max(1, totalCalculatedRides)) * 100))}%`,
+                        width: `${totalAssignedVehicles > 0 ? (veh.value / totalAssignedVehicles) * 100 : 0}%`,
                         backgroundColor: veh.color,
                       }}
                     />
@@ -756,7 +903,7 @@ export const Overview: React.FC = () => {
               <span>المسارات والخطوط الأكثر طلباً في أسوان (Hotspot Routes)</span>
             </h3>
             <p className="text-xs text-slate-500">
-              ترتيب المسارات الحقيقية بحسب عدد الرحلات المحققة
+              ترتيب المسارات الحقيقية بحسب عدد الرحلات المحققة ونسبة الطلب الفعلي
             </p>
           </div>
           <Link
@@ -791,6 +938,9 @@ export const Overview: React.FC = () => {
                   <Route className="w-3 h-3 text-rose-500 shrink-0" />
                   <span className="truncate">{route.to}</span>
                 </div>
+              </div>
+              <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800/40">
+                {route.subtitle}
               </div>
             </div>
           ))}

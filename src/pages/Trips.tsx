@@ -827,7 +827,7 @@ export const Trips: React.FC = () => {
                 )}
                 {selectedRide.commissionAmount && (
                   <div className="flex items-center justify-between text-slate-500 text-[11px]">
-                    <span>عمولة منصة ركوب (5%):</span>
+                    <span>عمولة منصة ركوب ({Math.round((selectedRide.commissionRate || 0.08) * 100)}%):</span>
                     <span className="font-mono text-rukoob-gold font-semibold">
                       +{selectedRide.commissionAmount} ج.م
                     </span>
