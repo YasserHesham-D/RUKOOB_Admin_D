@@ -22,7 +22,8 @@ import {
   Hourglass,
   CheckCircle,
   Activity,
-  Layers
+  Layers,
+  Calendar
 } from 'lucide-react';
 import {
   AreaChart,
@@ -79,11 +80,13 @@ const cleanAddress = (addr?: string | null): string => {
 export const Overview: React.FC = () => {
   const [stats, setStats] = useState<AdminDashboardDto | null>(null);
   const [allRides, setAllRides] = useState<RideDto[]>([]);
+  const [appCommissionRate, setAppCommissionRate] = useState<number>(0.08);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   // Active Filters for Advanced Analytics
   const [timeRange, setTimeRange] = useState<'today' | 'week' | 'month' | 'all'>('all');
+  const [specificDate, setSpecificDate] = useState<string>(''); // Exact date filter 'YYYY-MM-DD'
   const [vehicleType, setVehicleType] = useState<'all' | 'car' | 'moto'>('all');
   const [regionFilter, setRegionFilter] = useState<'all' | 'downtown' | 'corniche' | 'sahari' | 'airport'>('all');
   const [chartMetric, setChartMetric] = useState<'rides' | 'revenue'>('rides');
@@ -92,12 +95,30 @@ export const Overview: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      const [dashData, ridesData] = await Promise.all([
+      const [dashData, ridesData, settingsData] = await Promise.all([
         AdminService.getDashboard(),
         AdminService.getRides(1, 1000),
+        AdminService.getSettings().catch(() => []),
       ]);
       setStats(dashData);
       setAllRides(ridesData.items || []);
+
+      // Read live platform commission rate from platform settings or dashboard stats
+      const commSetting = Array.isArray(settingsData)
+        ? settingsData.find((s) => s.key === 'DefaultCommissionRate')
+        : undefined;
+      if (commSetting && commSetting.value) {
+        const parsed = parseFloat(commSetting.value.replace('%', '').trim());
+        if (!isNaN(parsed) && parsed > 0) {
+          setAppCommissionRate(parsed > 1 ? parsed / 100 : parsed);
+        }
+      } else if (dashData.defaultCommissionRate) {
+        setAppCommissionRate(
+          dashData.defaultCommissionRate > 1
+            ? dashData.defaultCommissionRate / 100
+            : dashData.defaultCommissionRate
+        );
+      }
     } catch (err) {
       addNotification({
         type: 'error',
@@ -112,6 +133,13 @@ export const Overview: React.FC = () => {
 
   useEffect(() => {
     fetchData();
+
+    // Auto-refresh every 40 seconds to stay aligned with backend active passengers background service
+    const interval = setInterval(() => {
+      fetchData();
+    }, 40000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleRefresh = () => {
@@ -121,11 +149,13 @@ export const Overview: React.FC = () => {
 
   const handleResetFilters = () => {
     setTimeRange('all');
+    setSpecificDate('');
     setVehicleType('all');
     setRegionFilter('all');
   };
 
-  const isAnyFilterActive = timeRange !== 'all' || vehicleType !== 'all' || regionFilter !== 'all';
+  const isAnyFilterActive = timeRange !== 'all' || !!specificDate || vehicleType !== 'all' || regionFilter !== 'all';
+  const isDayFilterActive = timeRange === 'today' || !!specificDate;
 
   // 100% Real data filtering on active rides
   const filteredRidesList = useMemo(() => {
@@ -137,8 +167,16 @@ export const Overview: React.FC = () => {
     return allRides.filter((ride) => {
       // 1. Real Date Range Filter
       if (ride.createdAt) {
-        const rideTime = new Date(ride.createdAt).getTime();
-        if (timeRange === 'today') {
+        const rideDate = new Date(ride.createdAt);
+        const rideTime = rideDate.getTime();
+
+        if (specificDate) {
+          const y = rideDate.getFullYear();
+          const m = String(rideDate.getMonth() + 1).padStart(2, '0');
+          const d = String(rideDate.getDate()).padStart(2, '0');
+          const formattedDate = `${y}-${m}-${d}`;
+          if (formattedDate !== specificDate) return false;
+        } else if (timeRange === 'today') {
           if (rideTime < startOfToday) return false;
         } else if (timeRange === 'week') {
           if (rideTime < sevenDaysAgo) return false;
@@ -175,7 +213,7 @@ export const Overview: React.FC = () => {
 
       return true;
     });
-  }, [allRides, timeRange, vehicleType, regionFilter]);
+  }, [allRides, timeRange, specificDate, vehicleType, regionFilter]);
 
   // Real Subsets
   const completedRides = useMemo(() => {
@@ -198,17 +236,22 @@ export const Overview: React.FC = () => {
 
   // Real GMV: Gross Merchandise Value MUST only include completed transactions (and ongoing active rides).
   const calculatedGMV = useMemo(() => {
-    if (timeRange === 'all' && vehicleType === 'all' && regionFilter === 'all' && stats?.totalRideValue) {
+    if (timeRange === 'all' && !specificDate && vehicleType === 'all' && regionFilter === 'all' && stats?.totalRideValue) {
       return stats.totalRideValue;
     }
     const sumCompleted = completedRides.reduce((acc, r) => acc + (r.finalPrice || r.offeredPrice || 0), 0);
     const sumActive = activeRides.reduce((acc, r) => acc + (r.finalPrice || r.offeredPrice || 0), 0);
     return sumCompleted + sumActive;
-  }, [completedRides, activeRides, timeRange, vehicleType, regionFilter, stats]);
+  }, [completedRides, activeRides, timeRange, specificDate, vehicleType, regionFilter, stats]);
 
-  // Real Commission: Platform fee collected strictly from completed rides
+  // App configured percentage
+  const appCommissionPercent = useMemo(() => {
+    return Math.round(appCommissionRate * 100);
+  }, [appCommissionRate]);
+
+  // Real Commission: Platform fee collected strictly from completed rides using dynamic app commission rate
   const calculatedCommission = useMemo(() => {
-    if (timeRange === 'all' && vehicleType === 'all' && regionFilter === 'all' && stats?.platformCommission) {
+    if (timeRange === 'all' && !specificDate && vehicleType === 'all' && regionFilter === 'all' && stats?.platformCommission) {
       return Math.round(stats.platformCommission * 10) / 10;
     }
     const sum = completedRides.reduce((acc, r) => {
@@ -216,52 +259,71 @@ export const Overview: React.FC = () => {
         return acc + r.commissionAmount;
       }
       const price = r.finalPrice || r.offeredPrice || 0;
-      return acc + (price * (r.commissionRate || 0.08));
+      return acc + (price * (r.commissionRate || appCommissionRate));
     }, 0);
     return Math.round(sum * 10) / 10;
-  }, [completedRides, timeRange, vehicleType, regionFilter, stats]);
+  }, [completedRides, timeRange, specificDate, vehicleType, regionFilter, stats, appCommissionRate]);
 
   // Real Driver Net Earnings: GMV minus Platform Commission
   const driverNetEarnings = useMemo(() => {
     return Math.max(0, Math.round((calculatedGMV - calculatedCommission) * 10) / 10);
   }, [calculatedGMV, calculatedCommission]);
 
-  // Real Effective Commission Percentage
+  // Real Effective Commission Percentage for the filtered period / day
   const effectiveCommissionRate = useMemo(() => {
-    if (calculatedGMV > 0) {
-      return ((calculatedCommission / calculatedGMV) * 100).toFixed(0);
+    if (calculatedGMV > 0 && calculatedCommission > 0) {
+      return ((calculatedCommission / calculatedGMV) * 100).toFixed(1);
     }
-    return '8';
-  }, [calculatedGMV, calculatedCommission]);
+    return appCommissionPercent.toString();
+  }, [calculatedGMV, calculatedCommission, appCommissionPercent]);
 
   // Real Ride Counts
   const totalCalculatedRides = useMemo(() => {
-    if (filteredRidesList.length === 0 && timeRange === 'all' && vehicleType === 'all' && regionFilter === 'all') {
+    if (filteredRidesList.length === 0 && timeRange === 'all' && !specificDate && vehicleType === 'all' && regionFilter === 'all') {
       return (stats?.completedRides || 0) + (stats?.activeRides || 0) + (stats?.cancelledRides || 0);
     }
     return filteredRidesList.length;
-  }, [filteredRidesList, timeRange, vehicleType, regionFilter, stats]);
+  }, [filteredRidesList, timeRange, specificDate, vehicleType, regionFilter, stats]);
 
   const calculatedCompletedRidesCount = useMemo(() => {
-    if (timeRange === 'all' && vehicleType === 'all' && regionFilter === 'all' && stats?.completedRides !== undefined) {
+    if (timeRange === 'all' && !specificDate && vehicleType === 'all' && regionFilter === 'all' && stats?.completedRides !== undefined) {
       return stats.completedRides;
     }
     return completedRides.length;
-  }, [completedRides, timeRange, vehicleType, regionFilter, stats]);
+  }, [completedRides, timeRange, specificDate, vehicleType, regionFilter, stats]);
 
   const calculatedActiveRidesCount = useMemo(() => {
-    if (timeRange === 'all' && vehicleType === 'all' && regionFilter === 'all' && stats?.activeRides !== undefined) {
+    if (timeRange === 'all' && !specificDate && vehicleType === 'all' && regionFilter === 'all' && stats?.activeRides !== undefined) {
       return stats.activeRides;
     }
     return activeRides.length;
-  }, [activeRides, timeRange, vehicleType, regionFilter, stats]);
+  }, [activeRides, timeRange, specificDate, vehicleType, regionFilter, stats]);
 
   const calculatedCancelledRidesCount = useMemo(() => {
-    if (timeRange === 'all' && vehicleType === 'all' && regionFilter === 'all' && stats?.cancelledRides !== undefined) {
+    if (timeRange === 'all' && !specificDate && vehicleType === 'all' && regionFilter === 'all' && stats?.cancelledRides !== undefined) {
       return stats.cancelledRides;
     }
     return cancelledRides.length;
-  }, [cancelledRides, timeRange, vehicleType, regionFilter, stats]);
+  }, [cancelledRides, timeRange, specificDate, vehicleType, regionFilter, stats]);
+
+  // Share percentages of the filtered day/period compared to platform overall
+  const dayGmvShare = useMemo(() => {
+    const total = stats?.totalRideValue || 0;
+    if (total <= 0 || calculatedGMV <= 0) return '0.0';
+    return Math.min(100, (calculatedGMV / total) * 100).toFixed(1);
+  }, [calculatedGMV, stats]);
+
+  const dayTripsShare = useMemo(() => {
+    const total = stats?.completedRides || 0;
+    if (total <= 0 || calculatedCompletedRidesCount <= 0) return '0.0';
+    return Math.min(100, (calculatedCompletedRidesCount / total) * 100).toFixed(1);
+  }, [calculatedCompletedRidesCount, stats]);
+
+  const dayCommissionShare = useMemo(() => {
+    const total = stats?.platformCommission || 0;
+    if (total <= 0 || calculatedCommission <= 0) return '0.0';
+    return Math.min(100, (calculatedCommission / total) * 100).toFixed(1);
+  }, [calculatedCommission, stats]);
 
   // Real Fulfillment Rate: Completed rides / Finished rides
   const fulfillmentRate = useMemo(() => {
@@ -342,7 +404,7 @@ export const Overview: React.FC = () => {
 
   // Real Hourly / Daily Trend Chart Data from actual rides
   const trendData = useMemo(() => {
-    if (timeRange === 'today') {
+    if (timeRange === 'today' || specificDate) {
       const hours = ['06:00', '09:00', '12:00', '15:00', '18:00', '21:00', '00:00'];
       return hours.map((hourLabel) => {
         const hourNum = parseInt(hourLabel.split(':')[0], 10);
@@ -395,7 +457,7 @@ export const Overview: React.FC = () => {
         .reduce((acc, r) => acc + (r.finalPrice || r.offeredPrice || 0), 0);
       return { time: b.label, rides: ridesCount, revenue };
     });
-  }, [filteredRidesList, timeRange]);
+  }, [filteredRidesList, timeRange, specificDate]);
 
   // Real Fleet Split based solely on assigned vehicle rides
   const vehicleSplitData = useMemo(() => {
@@ -566,13 +628,23 @@ export const Overview: React.FC = () => {
               {/* Box 2: Net Commission */}
               <div className="bg-[#1A2621] p-4 rounded-xl border border-amber-800/30 space-y-1">
                 <div className="flex items-center justify-between text-xs text-slate-300">
-                  <span>صافي العمولات</span>
+                  <span className="flex items-center gap-1.5">
+                    <span>صافي العمولات</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30 font-mono">
+                      عمولة التطبيق: {appCommissionPercent}%
+                    </span>
+                  </span>
                   <Percent className="w-4 h-4 text-amber-400" />
                 </div>
                 <div className="text-xl sm:text-2xl font-bold font-mono text-amber-400 tracking-tight">
                   {Math.round(stats.platformCommission).toLocaleString()} ج.م
                 </div>
-                <div className="text-[10px] text-slate-400">أرباح عمولة ركوب المحصلة</div>
+                <div className="text-[10px] text-slate-400 flex items-center justify-between">
+                  <span>أرباح عمولة ركوب المحصلة</span>
+                  <Link to="/settings" className="text-amber-400/80 hover:text-amber-300 underline text-[10px]">
+                    تعديل النسبة
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
@@ -660,7 +732,7 @@ export const Overview: React.FC = () => {
             </div>
           </div>
 
-          {/* 4. ركاب نشطون الآن (خدمة الباك إند الخلفية كل 10 دقائق) */}
+          {/* 4. ركاب نشطون الآن (خدمة الباك إند الخلفية كل 40 ثانية) */}
           <div className="card-glass p-4 rounded-xl border border-emerald-500/30 dark:border-emerald-500/30 bg-emerald-500/5 flex items-center justify-between shadow-sm relative overflow-hidden">
             <div>
               <div className="flex items-center gap-1.5">
@@ -673,7 +745,7 @@ export const Overview: React.FC = () => {
               <span className="text-xl lg:text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1 block">
                 {stats.activePassengers ?? 0}
               </span>
-              <span className="text-[9px] text-slate-400 block mt-0.5">خدمة خلفية بالباك إند (كل 10 د)</span>
+              <span className="text-[9px] text-slate-400 block mt-0.5">خدمة خلفية بالباك إند (كل 40 ثانية)</span>
             </div>
             <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-600">
               <Activity className="w-5 h-5" />
@@ -773,28 +845,102 @@ export const Overview: React.FC = () => {
             </p>
           </div>
 
-          {/* Time Range Filter Tabs */}
-          <div className="bg-white dark:bg-rukoob-dark p-1 rounded-xl border border-slate-200 dark:border-rukoob-forest/50 flex items-center shadow-sm">
-            {[
-              { id: 'today', label: 'اليوم' },
-              { id: 'week', label: 'هذا الأسبوع' },
-              { id: 'month', label: 'هذا الشهر' },
-              { id: 'all', label: 'كل الأوقات' },
-            ].map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTimeRange(t.id as any)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  timeRange === t.id
-                    ? 'bg-rukoob-forest dark:bg-rukoob-gold text-white dark:text-rukoob-dark shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Specific Day Picker */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-rukoob-dark rounded-xl border border-slate-200 dark:border-rukoob-forest/50 shadow-sm text-xs">
+              <Calendar className="w-3.5 h-3.5 text-rukoob-forest-light dark:text-rukoob-gold shrink-0" />
+              <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400">يوم محدد:</span>
+              <input
+                type="date"
+                value={specificDate}
+                onChange={(e) => {
+                  setSpecificDate(e.target.value);
+                  if (e.target.value) setTimeRange('all');
+                }}
+                className="bg-transparent text-slate-900 dark:text-white font-bold font-mono text-xs focus:outline-none cursor-pointer"
+              />
+              {specificDate && (
+                <button
+                  onClick={() => setSpecificDate('')}
+                  className="text-slate-400 hover:text-rose-500 font-bold ml-1 text-xs"
+                  title="إلغاء تحديد اليوم"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Time Range Filter Tabs */}
+            <div className="bg-white dark:bg-rukoob-dark p-1 rounded-xl border border-slate-200 dark:border-rukoob-forest/50 flex items-center shadow-sm">
+              {[
+                { id: 'today', label: 'اليوم' },
+                { id: 'week', label: 'هذا الأسبوع' },
+                { id: 'month', label: 'هذا الشهر' },
+                { id: 'all', label: 'كل الأوقات' },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => {
+                    setTimeRange(t.id as any);
+                    if (specificDate) setSpecificDate('');
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    timeRange === t.id && !specificDate
+                      ? 'bg-rukoob-forest dark:bg-rukoob-gold text-white dark:text-rukoob-dark shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
+
+        {/* Day of Filtering - Live Percentages & Metrics Ribbon */}
+        {isDayFilterActive && (
+          <div className="card-glass p-4 rounded-2xl border border-rukoob-gold/40 bg-gradient-to-r from-rukoob-gold/10 via-amber-500/5 to-transparent flex flex-wrap items-center justify-between gap-4 text-xs shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rukoob-gold/20 flex items-center justify-center text-rukoob-gold font-bold shrink-0">
+                <Percent className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+                  <span>نسب ومؤشرات يوم الفلترة:</span>
+                  <span className="text-rukoob-forest-light dark:text-rukoob-gold font-mono font-bold">
+                    {specificDate ? specificDate : 'اليوم الحالي'}
+                  </span>
+                </h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  عرض تحليلي دقيق لنسبة العمولة الفعلية وحصة يوم الفلترة مقارنة بإجمالي أداء المنصة
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5 font-mono text-xs">
+              <div className="px-3 py-1.5 rounded-xl bg-amber-500/10 dark:bg-amber-950/40 border border-amber-500/30 text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                <span className="font-sans text-[11px] font-bold">عمولة اليوم:</span>
+                <span className="font-bold">{effectiveCommissionRate}%</span>
+                <span className="text-[10px] opacity-75 font-sans">(المقررة: {appCommissionPercent}%)</span>
+              </div>
+
+              <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 dark:bg-emerald-950/40 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+                <span className="font-sans text-[11px] font-bold">حصة اليوم من المبيعات:</span>
+                <span className="font-bold">{dayGmvShare}%</span>
+              </div>
+
+              <div className="px-3 py-1.5 rounded-xl bg-blue-500/10 dark:bg-blue-950/40 border border-blue-500/30 text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                <span className="font-sans text-[11px] font-bold">حصة اليوم من الرحلات:</span>
+                <span className="font-bold">{dayTripsShare}%</span>
+              </div>
+
+              <div className="px-3 py-1.5 rounded-xl bg-purple-500/10 dark:bg-purple-950/40 border border-purple-500/30 text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
+                <span className="font-sans text-[11px] font-bold">معدل إنجاز اليوم:</span>
+                <span className="font-bold">{fulfillmentRate}%</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Vehicle & Region Segment Ribbon */}
         <div className="card-glass p-3.5 rounded-2xl border border-slate-200 dark:border-rukoob-forest/40 flex flex-wrap items-center justify-between gap-3 text-xs shadow-sm">
@@ -852,19 +998,19 @@ export const Overview: React.FC = () => {
         {/* Filtered Primary KPIs */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
-            title="قيمة التداول المصفاة (GMV)"
+            title={isDayFilterActive ? "قيمة تداول يوم الفلترة (GMV)" : "قيمة التداول المصفاة (GMV)"}
             value={`${calculatedGMV.toLocaleString()} ج.م`}
-            subtitle="قيمة الرحلات المكتملة في هذا النطاق"
+            subtitle={isDayFilterActive ? `حصة يوم الفلترة: ${dayGmvShare}% من مبيعات المنصة` : "قيمة الرحلات المكتملة في هذا النطاق"}
             icon={Banknote}
-            change="مبيعات المشاوير"
+            change={isDayFilterActive ? `${dayGmvShare}% من الإجمالي` : "مبيعات المشاوير"}
             isPositive={true}
             iconColor="text-emerald-500"
           />
 
           <StatCard
-            title="عمولة المنصة المصفاة"
+            title={isDayFilterActive ? "عمولة المنصة ليوم الفلترة" : "عمولة المنصة المصفاة"}
             value={`${calculatedCommission.toLocaleString()} ج.م`}
-            subtitle={`نسبة العمولة: ${effectiveCommissionRate}%`}
+            subtitle={`نسبة العمولة: ${effectiveCommissionRate}% (المقررة للتطبيق: ${appCommissionPercent}%)`}
             icon={DollarSign}
             change={`عمولة ${effectiveCommissionRate}%`}
             isPositive={true}
@@ -872,11 +1018,11 @@ export const Overview: React.FC = () => {
           />
 
           <StatCard
-            title="صافي مستحقات الكباتن"
+            title={isDayFilterActive ? "صافي مستحقات الكباتن لليوم" : "صافي مستحقات الكباتن"}
             value={`${driverNetEarnings.toLocaleString()} ج.م`}
-            subtitle="صافي السائقين بعد العمولة"
+            subtitle={isDayFilterActive ? `يمثل ${(100 - parseFloat(effectiveCommissionRate)).toFixed(1)}% من إجمالي مبيعات اليوم` : "صافي السائقين بعد العمولة"}
             icon={Wallet}
-            change="محافظ السائقين"
+            change={isDayFilterActive ? `${(100 - parseFloat(effectiveCommissionRate)).toFixed(1)}% للسائقين` : "محافظ السائقين"}
             isPositive={true}
             iconColor="text-emerald-500"
           />
@@ -884,9 +1030,9 @@ export const Overview: React.FC = () => {
           <StatCard
             title="متوسط قيمة الرحلة (AOV)"
             value={`${averageTripValue} ج.م`}
-            subtitle="متوسط تكلفة الرحلة المكتملة"
+            subtitle={isDayFilterActive ? `حصة رحلات اليوم: ${dayTripsShare}% (${calculatedCompletedRidesCount} رحلة)` : "متوسط تكلفة الرحلة المكتملة"}
             icon={Percent}
-            change="معدل المشوار"
+            change={isDayFilterActive ? `${dayTripsShare}% من الرحلات` : "معدل المشوار"}
             isPositive={true}
             iconColor="text-blue-500"
           />

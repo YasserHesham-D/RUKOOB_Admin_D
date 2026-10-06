@@ -186,6 +186,7 @@ export interface AdminDashboardDto {
   activePassengersLastSync?: string;
   totalRideValue: number;
   platformCommission: number;
+  defaultCommissionRate?: number;
   pendingDriverVerifications: number;
 }
 
